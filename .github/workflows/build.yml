@@ -264,14 +264,6 @@ jobs:
       artifact_name: ${{ steps.prepare_artifacts.outputs.artifact_name }}
       version: ${{ steps.get_version.outputs.version }}
     steps:
-      - name: Create workspace directories
-        run: |
-          echo "Creating artifact workspace directories"
-          mkdir -p ${{ env.CACHE_DIR }}
-          mkdir -p ${{ env.RELEASE_DIR }}
-          rm -rf ${{ env.REPO_DIR }}_artifacts || true
-          mkdir -p ${{ env.REPO_DIR }}_artifacts
-      
       - name: Get version information
         id: get_version
         run: |
@@ -279,13 +271,24 @@ jobs:
           if [ -f "${{ env.CACHE_DIR }}/version.txt" ]; then
             VERSION=$(cat ${{ env.CACHE_DIR }}/version.txt)
           else
-            # Fallback to extracting from repository
-            echo "Version file not found, checking out repository"
-            cd ${{ env.REPO_DIR }}_artifacts
-            git clone https://github.com/${{ github.repository }}.git ./repo
-            cd repo
+            # Generate a timestamp for unique directory
+            TIMESTAMP=$(date +%s)
+            CHECKOUT_DIR="/tmp/repo_checkout_${TIMESTAMP}"
+            
+            echo "Version file not found, checking out repository to $CHECKOUT_DIR"
+            mkdir -p "$CHECKOUT_DIR"
+            cd "$CHECKOUT_DIR"
+            
+            # Clone the repository to this unique directory
+            git clone https://github.com/${{ github.repository }}.git .
+            
+            # Extract version
             VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
             echo "$VERSION" > ${{ env.CACHE_DIR }}/version.txt
+            
+            # Clean up
+            cd /tmp
+            rm -rf "$CHECKOUT_DIR"
           fi
           
           echo "version=$VERSION" >> $GITHUB_OUTPUT
@@ -302,10 +305,18 @@ jobs:
           
           # Copy build artifacts if needed
           if [ ! -d "${{ env.ARTIFACT_DIR }}/target" ]; then
-            echo "ERROR: Build artifacts not found, checking out and rebuilding"
-            cd ${{ env.REPO_DIR }}_artifacts
-            git clone https://github.com/${{ github.repository }}.git ./repo
-            cd repo
+            echo "ERROR: Build artifacts not found, rebuilding from scratch"
+            
+            # Generate a timestamp for unique directory
+            TIMESTAMP=$(date +%s)
+            REBUILD_DIR="/tmp/rebuild_${TIMESTAMP}"
+            
+            echo "Creating unique rebuild directory at $REBUILD_DIR"
+            mkdir -p "$REBUILD_DIR"
+            cd "$REBUILD_DIR"
+            
+            # Clone the repository
+            git clone https://github.com/${{ github.repository }}.git .
             
             if [[ "${{ github.ref }}" == refs/pull/* ]]; then
               git fetch origin ${{ github.ref }} --depth=1
@@ -323,10 +334,19 @@ jobs:
               sudo apt-get install -y openjdk-17-jdk
             }
             
-            # Build again
+            # Build
+            echo "Building project in $REBUILD_DIR"
             mvn -B clean package
+            
+            # Create artifact directory and copy build artifacts
             mkdir -p ${{ env.ARTIFACT_DIR }}/target
             cp -r target/* ${{ env.ARTIFACT_DIR }}/target/
+            
+            # Clean up rebuild directory
+            cd /tmp
+            rm -rf "$REBUILD_DIR"
+            
+            echo "Rebuild complete, artifacts copied to ${{ env.ARTIFACT_DIR }}/target/"
           fi
           
           # Find exact JAR file
@@ -360,13 +380,6 @@ jobs:
     needs: prepare-artifacts
     runs-on: ubuntu-latest
     steps:
-      - name: Create workspace directories
-        run: |
-          echo "Creating release workspace directories"
-          mkdir -p ${{ env.RELEASE_DIR }}
-          rm -rf ${{ env.REPO_DIR }}_release || true
-          mkdir -p ${{ env.REPO_DIR }}_release
-      
       - name: Get version information
         run: |
           # Extract version from tag
@@ -396,13 +409,18 @@ jobs:
           
           # Check if artifact exists
           if [ ! -f "$ARTIFACT_PATH" ]; then
-            echo "ERROR: Release artifact not found, retrieving from previous job"
-            mkdir -p ${{ env.RELEASE_DIR }}
+            echo "ERROR: Release artifact not found, rebuilding from scratch"
             
-            # Check out repository to get artifact from scratch if needed
-            cd ${{ env.REPO_DIR }}_release
-            git clone https://github.com/${{ github.repository }}.git ./repo
-            cd repo
+            # Generate a timestamp for unique directory
+            TIMESTAMP=$(date +%s)
+            RELEASE_REBUILD_DIR="/tmp/release_rebuild_${TIMESTAMP}"
+            
+            mkdir -p ${{ env.RELEASE_DIR }}
+            mkdir -p "$RELEASE_REBUILD_DIR"
+            cd "$RELEASE_REBUILD_DIR"
+            
+            # Clone the repository
+            git clone https://github.com/${{ github.repository }}.git .
             
             if [[ "${{ github.ref }}" == refs/tags/* ]]; then
               git fetch --depth=1 origin +${{ github.ref }}:${{ github.ref }}
@@ -416,10 +434,15 @@ jobs:
             }
             
             # Build
+            echo "Building release in $RELEASE_REBUILD_DIR"
             mvn -B clean package
             
             # Copy to release directory
             cp -v "target/$ARTIFACT_NAME" "${{ env.RELEASE_DIR }}/$ARTIFACT_NAME"
+            
+            # Clean up 
+            cd /tmp
+            rm -rf "$RELEASE_REBUILD_DIR"
           fi
           
           echo "Release artifact verified at: $ARTIFACT_PATH"
@@ -457,23 +480,25 @@ jobs:
     needs: create-release
     runs-on: ubuntu-latest
     steps:
-      - name: Create workspace directories
-        run: |
-          echo "Creating documentation workspace directories"
-          rm -rf ${{ env.REPO_DIR }}_docs || true
-          mkdir -p ${{ env.REPO_DIR }}_docs
-      
       - name: Manual repository checkout
         run: |
           echo "Checking out repository for documentation update"
-          cd ${{ env.REPO_DIR }}_docs
-          git clone https://github.com/${{ github.repository }}.git ./repo
-          cd repo
+          # Generate a timestamp for unique directory
+          TIMESTAMP=$(date +%s)
+          DOCS_DIR="/tmp/docs_update_${TIMESTAMP}"
+          
+          mkdir -p "$DOCS_DIR"
+          cd "$DOCS_DIR"
+          
+          git clone https://github.com/${{ github.repository }}.git .
           
           if [[ "${{ github.ref }}" == refs/tags/* ]]; then
             git fetch --depth=1 origin +${{ github.ref }}:${{ github.ref }}
             git checkout ${{ github.ref }}
           fi
+          
+          # Store the directory path for later use
+          echo "DOCS_DIR=$DOCS_DIR" >> $GITHUB_ENV
       
       - name: Extract version from tag
         run: |
@@ -483,7 +508,7 @@ jobs:
       
       - name: Update VERSIONS Documentation
         run: |
-          cd ${{ env.REPO_DIR }}_docs/repo
+          cd ${{ env.DOCS_DIR }}
           echo "Updating VERSIONS.md for $VERSION"
           
           # Get current date
@@ -523,11 +548,13 @@ jobs:
           echo "=== Debug Information ==="
           echo "Current directory: $(pwd)"
           
-          echo "Repository information:"
-          for DIR in "${{ env.REPO_DIR }}" "${{ env.REPO_DIR }}_build" "${{ env.REPO_DIR }}_test" "${{ env.REPO_DIR }}_artifacts" "${{ env.REPO_DIR }}_release" "${{ env.REPO_DIR }}_docs"; do
+          echo "Shared directories:"
+          for DIR in "${{ env.CACHE_DIR }}" "${{ env.ARTIFACT_DIR }}" "${{ env.RELEASE_DIR }}"; do
             if [ -d "$DIR" ]; then
               echo "Contents of $DIR:"
               ls -la "$DIR"
+            else
+              echo "Directory $DIR not found"
             fi
           done
           
