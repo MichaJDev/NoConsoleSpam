@@ -19,9 +19,13 @@ A Minecraft Fabric mod that reduces console spam by filtering out unnecessary me
 ## Installation
 
 1. Install [Fabric Loader](https://fabricmc.net/use/) for Minecraft 1.20.1
-2. Download the latest version of NoConsoleSpam from the releases page
+2. Download the latest version of NoConsoleSpam from the [releases page](https://github.com/yourusername/NoConsoleSpam/releases) or check the [versions list](VERSIONS.md)
 3. Place the mod JAR file in your Minecraft mods folder
 4. Launch Minecraft with Fabric Loader
+
+## Downloads
+
+All versions of the mod can be found in the [VERSIONS.md](VERSIONS.md) file, which is automatically updated when new releases are published.
 
 ## Configuration
 

@@ -1,0 +1,165 @@
+name: NoConsoleSpam Build and Release
+
+on:
+  push:
+    branches: [ main ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+          
+      - name: Validate Maven project
+        run: mvn -B validate
+
+  build:
+    name: Build and Test
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+          
+      - name: Build with Maven
+        run: mvn -B clean package
+        
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: noconsolespam-jar
+          path: target/noconsolespam-*.jar
+          
+      - name: Run tests
+        run: mvn -B test
+        
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+          
+      - name: Build with Maven
+        run: mvn -B clean package
+      
+      - name: Get version from pom.xml
+        id: get_version
+        run: echo "VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)" >> $GITHUB_OUTPUT
+        
+      - name: Generate changelog
+        id: changelog
+        uses: metcalfc/changelog-generator@v4.1.0
+        with:
+          myToken: ${{ secrets.GITHUB_TOKEN }}
+        
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: NoConsoleSpam ${{ steps.get_version.outputs.VERSION }}
+          body: |
+            # NoConsoleSpam ${{ steps.get_version.outputs.VERSION }}
+            
+            ${{ steps.changelog.outputs.changelog }}
+            
+            ## Installation
+            1. Install [Fabric Loader](https://fabricmc.net/use/) for Minecraft 1.20.1
+            2. Download the JAR file
+            3. Place it in your Minecraft mods folder
+            
+            For more details, see the [README](https://github.com/${{ github.repository }}/blob/main/README.md)
+          draft: false
+          prerelease: false
+          
+      - name: Upload Release Asset
+        id: upload-release-asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./target/noconsolespam-${{ steps.get_version.outputs.VERSION }}.jar
+          asset_name: noconsolespam-${{ steps.get_version.outputs.VERSION }}.jar
+          asset_content_type: application/java-archive
+          
+      - name: Update VERSIONS.md
+        run: |
+          echo "Updating VERSIONS.md is handled by a separate workflow"
+          
+  update-versions:
+    name: Update Versions Document
+    needs: release
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          
+      - name: Get version from pom.xml
+        id: get_version
+        run: echo "VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)" >> $GITHUB_OUTPUT
+        
+      - name: Update VERSIONS.md
+        run: |
+          # Get current date
+          DATE=$(date +"%Y-%m-%d")
+          
+          # Prepare new version entry
+          NEW_ENTRY="## [${{ steps.get_version.outputs.VERSION }}](https://github.com/${{ github.repository }}/releases/tag/v${{ steps.get_version.outputs.VERSION }}) - $DATE\n\n- [Download JAR](https://github.com/${{ github.repository }}/releases/download/v${{ steps.get_version.outputs.VERSION }}/noconsolespam-${{ steps.get_version.outputs.VERSION }}.jar)\n- [View Changes](https://github.com/${{ github.repository }}/blob/main/CHANGES.md#$(echo ${{ steps.get_version.outputs.VERSION }} | sed 's/\\./-/g'))\n"
+          
+          # If VERSIONS.md doesn't exist, create it
+          if [ ! -f VERSIONS.md ]; then
+            echo "# NoConsoleSpam Versions\n\nThis document provides links to all released versions of NoConsoleSpam.\n" > VERSIONS.md
+          fi
+          
+          # Add new entry after header
+          awk -v new_entry="$NEW_ENTRY" 'NR==4{print new_entry}1' VERSIONS.md > VERSIONS.md.tmp && mv VERSIONS.md.tmp VERSIONS.md
+          
+      - name: Commit and push VERSIONS.md update
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add VERSIONS.md
+          git commit -m "Update VERSIONS.md for ${{ steps.get_version.outputs.VERSION }}" || echo "No changes to commit"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
