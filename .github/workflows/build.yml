@@ -14,99 +14,127 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      # Manual checkout instead of using actions/checkout
       - name: Manual repository checkout
         run: |
           echo "Performing manual checkout"
-          # Create working directory
-          mkdir -p workspace
-          cd workspace
-          
-          # Initialize git
-          git init
-          git remote add origin https://github.com/${{ github.repository }}.git
+          git clone https://github.com/${{ github.repository }}.git .
           
           if [[ "${{ github.ref }}" == refs/pull/* ]]; then
             # For pull requests
             git fetch origin ${{ github.ref }} --depth=1
             git checkout FETCH_HEAD
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            # For tags
+            git fetch --depth=1 origin +${{ github.ref }}:${{ github.ref }}
+            git checkout ${{ github.ref }}
           else
-            # For branches and tags
-            git fetch origin ${{ github.ref }} --depth=1
-            git checkout FETCH_HEAD
+            # For branches
+            git checkout ${{ github.ref_name }}
           fi
           
-          # Set the workspace directory
-          echo "WORKSPACE=$(pwd)" >> $GITHUB_ENV
+          echo "Repository checkout complete"
           ls -la
       
-      # Manual JDK setup instead of using actions/setup-java
       - name: Setup JDK 17
         run: |
           echo "Setting up JDK 17"
-          # Install JDK if needed
-          sudo apt-get update
-          sudo apt-get install -y openjdk-17-jdk
-          export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
-          export PATH=$JAVA_HOME/bin:$PATH
+          java -version || {
+            echo "Java not found, installing OpenJDK 17"
+            sudo apt-get update
+            sudo apt-get install -y openjdk-17-jdk
+          }
           
-          # Add to GitHub ENV for other steps
+          export JAVA_HOME=$(dirname $(dirname $(readlink -f $(which javac))))
+          echo "JAVA_HOME=$JAVA_HOME"
+          echo "PATH=$PATH:$JAVA_HOME/bin" >> $GITHUB_ENV
           echo "JAVA_HOME=$JAVA_HOME" >> $GITHUB_ENV
-          echo "PATH=$PATH" >> $GITHUB_ENV
           
-          # Verify Java installation
+          # Verify installation
           java -version
           javac -version
           
       - name: Build with Maven
         run: |
-          cd $WORKSPACE
           echo "Building project with Maven"
           mvn -B clean package
+          
+          # Verify build success
+          if [ ! -d "target" ]; then
+            echo "Error: Build failed - target directory not found"
+            exit 1
+          fi
+          
+          echo "Build directory contents:"
+          ls -la target/
           
       - name: Extract version from pom.xml
         id: version
         run: |
-          cd $WORKSPACE
           VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "Extracted version: $VERSION"
           
       - name: Run tests
         run: |
-          cd $WORKSPACE
           echo "Running tests"
           mvn -B test
       
-      - name: Prepare artifact directory
+      - name: Prepare release artifacts
         run: |
-          cd $WORKSPACE
-          echo "Preparing artifact directory"
+          echo "Preparing release artifacts"
+          # Create artifacts directory
           mkdir -p artifacts
+          
+          # Find exact JAR file
           ARTIFACT_NAME="noconsolespam-$VERSION.jar"
-          cp target/$ARTIFACT_NAME artifacts/
+          ARTIFACT_PATH="target/$ARTIFACT_NAME"
+          
+          if [ ! -f "$ARTIFACT_PATH" ]; then
+            echo "ERROR: JAR file not found at expected path: $ARTIFACT_PATH"
+            echo "Contents of target directory:"
+            ls -la target/
+            exit 1
+          fi
+          
+          # Copy JAR to artifacts directory with verbose output
+          echo "Copying $ARTIFACT_PATH to artifacts/$ARTIFACT_NAME"
+          cp -v "$ARTIFACT_PATH" "artifacts/$ARTIFACT_NAME"
+          
+          # Save artifact name for use in later steps
           echo "ARTIFACT_NAME=$ARTIFACT_NAME" >> $GITHUB_ENV
-          echo "Prepared artifact: $ARTIFACT_NAME"
+          
+          echo "Artifacts directory contents:"
           ls -la artifacts/
+          
+          # Create artifact archive
+          echo "Creating artifact archive"
+          tar -czvf artifacts/noconsolespam-build.tar.gz artifacts/$ARTIFACT_NAME
       
       # Create release if it's a tag
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
-          cd $WORKSPACE
           echo "Creating GitHub release for version $VERSION"
           
           # Install GitHub CLI
-          sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-key C99B11DEB97541F0
-          sudo apt-add-repository https://cli.github.com/packages
-          sudo apt update
-          sudo apt install -y gh
+          type -p curl >/dev/null || sudo apt install curl -y
+          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+          && sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+          && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+          && sudo apt update \
+          && sudo apt install gh -y
           
           # Authenticate with GitHub CLI
           echo "${{ github.token }}" | gh auth login --with-token
           
-          # Create a release
+          # Verify artifact exists
           ARTIFACT_PATH="artifacts/$ARTIFACT_NAME"
+          if [ ! -f "$ARTIFACT_PATH" ]; then
+            echo "ERROR: JAR file not found at: $ARTIFACT_PATH"
+            echo "Contents of artifacts directory:"
+            ls -la artifacts/
+            exit 1
+          fi
           
           # Create release notes
           cat > release_notes.md << EOF
@@ -121,6 +149,7 @@ jobs:
           EOF
           
           # Create the release
+          echo "Creating release with artifact: $ARTIFACT_PATH"
           gh release create "v$VERSION" \
             --title "NoConsoleSpam $VERSION" \
             --notes-file release_notes.md \
@@ -130,7 +159,6 @@ jobs:
       - name: Update VERSIONS Documentation
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
-          cd $WORKSPACE
           echo "Updating VERSIONS.md for $VERSION"
           
           # Get current date
@@ -159,21 +187,21 @@ jobs:
           git remote set-url origin https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git
           git push origin HEAD:${GITHUB_REF#refs/heads/}
           
-      # Upload artifacts as workflow artifacts for debugging
-      - name: Save artifacts for download
+      # For debugging - save information about workspace contents
+      - name: Debug information
         if: always()
         run: |
-          cd $WORKSPACE
-          echo "Saving artifacts for download"
+          echo "=== Debug Information ==="
+          echo "Current directory: $(pwd)"
+          echo "Repository contents:"
+          ls -la
           
-          # Create archive of artifacts
-          tar -czvf noconsolespam-build.tar.gz artifacts/
+          echo "Target directory contents:"
+          ls -la target/ || echo "No target directory found"
           
-          # Move to a predictable location that GitHub actions can access
-          mkdir -p /tmp/artifacts
-          cp noconsolespam-build.tar.gz /tmp/artifacts/
+          echo "Artifacts directory contents:"
+          ls -la artifacts/ || echo "No artifacts directory found"
           
-          echo "Artifacts saved to /tmp/artifacts/noconsolespam-build.tar.gz"
-          
-          # Output artifact location for GitHub to find
-          echo "ARTIFACT_PATH=/tmp/artifacts/noconsolespam-build.tar.gz" >> $GITHUB_ENV 
+          echo "Environment variables:"
+          echo "VERSION: $VERSION"
+          echo "ARTIFACT_NAME: $ARTIFACT_NAME 
