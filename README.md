@@ -1,0 +1,101 @@
+# NoConsoleSpam
+
+A Minecraft Fabric mod that reduces console spam by filtering out unnecessary messages and warnings.
+
+## Features
+
+- Filters out common spam patterns including:
+  - Lithium-related messages
+  - Mismatch block errors
+  - Server overloading messages
+  - Player movement warnings
+  - Class Analysis Errors
+  - Support for custom patterns via configuration
+- External JSON configuration file for easy customization
+- Individual error logging to separate files for better debugging
+- Customizable color schemes for console output and logs
+- Lightweight and efficient
+- Compatible with Minecraft 1.20.1
+
+## Installation
+
+1. Install [Fabric Loader](https://fabricmc.net/use/) for Minecraft 1.20.1
+2. Download the latest version of NoConsoleSpam from the releases page
+3. Place the mod JAR file in your Minecraft mods folder
+4. Launch Minecraft with Fabric Loader
+
+## Configuration
+
+The mod now uses an external configuration file located at `config/NoConsoleSpam/spamfilters.json`. This file is automatically created when the mod is first run.
+
+You can customize the following settings:
+- Spam patterns (using regular expressions)
+- Ignored loggers (to completely silence specific loggers)
+- Exception logging settings
+
+Example configuration:
+
+```json
+{
+  "spamPatterns": [
+    ".*Lithium.*",
+    ".*mismatch.*",
+    ".*overloading.*",
+    ".*moving.*wrongly.*",
+    ".*Class Analysis Error.*"
+  ],
+  "ignoredLoggers": [
+    "net.minecraft.class_5458",
+    "net.minecraft.class_5459",
+    "net.minecraft.class_5460"
+  ],
+  "exceptionSettings": {
+    "captureExceptions": true,
+    "logFile": "logs/exceptions.log",
+    "maxLogSize": 10485760,
+    "maxBackupIndex": 3
+  }
+}
+```
+
+## Color Customization
+
+The mod includes a `colorize.json` file that allows you to customize the colors and formatting of console output and log files. This makes it easier to distinguish between different types of messages.
+
+You can customize:
+- Console output colors for different log levels (INFO, WARN, ERROR, DEBUG)
+- Exception log formatting
+- Mod status messages
+- Log format templates
+
+The file uses Minecraft's color code format (§ followed by a character) to define colors and formatting styles.
+
+## Exception Logging
+
+Exceptions are now logged individually to separate files in the `Console Errors` directory. Each exception gets its own file with a timestamp and exception type in the filename. This makes debugging much easier as you can easily identify and review specific errors.
+
+## Changelog
+
+### [1.2.0](CHANGES.md#120) - Current
+- Added individual error logging to separate files in "Console Errors" directory
+- Improved exception handling and logging
+- Added colorize.json for customizable message formatting
+
+### [1.1.0](CHANGES.md#110)
+- Added external configuration file support
+- Moved spam filters to config/NoConsoleSpam/spamfilters.json
+- Added more default spam patterns
+
+### [1.0.0](CHANGES.md#100)
+- Initial release
+- Basic console spam filtering
+
+For more detailed information about each release, see the [CHANGES.md](CHANGES.md) file.
+
+## Contributing
+
+Feel free to submit issues and pull requests. When submitting a pull request, please ensure that your changes are well-tested and documented.
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details. 

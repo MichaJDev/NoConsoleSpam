@@ -1,0 +1,7 @@
+eu\prismm\ExceptionLogger.class
+eu\prismm\FilterConfig.class
+eu\prismm\SpamFilter$SimpleLogEvent.class
+eu\prismm\FilterConfig$ExceptionSettings.class
+eu\prismm\SpamFilter$SimpleMessage.class
+eu\prismm\NoConsoleSpam.class
+eu\prismm\SpamFilter.class

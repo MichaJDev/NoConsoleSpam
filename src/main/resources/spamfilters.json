@@ -1,0 +1,23 @@
+{
+  "spamPatterns": [
+    ".*Lithium.*",
+    ".*mismatch.*",
+    ".*overloading.*",
+    ".*moving.*wrongly.*",
+    ".*Class Analysis Error.*",
+    ".*your custom create.*",
+    ".*Your custom createaddition.*",
+    ".*Parsing error loading recipe.*"
+  ],
+  "ignoredLoggers": [
+    "net.minecraft.class_5458",
+    "net.minecraft.class_5459",
+    "net.minecraft.class_5460"
+  ],
+  "exceptionSettings": {
+    "captureExceptions": true,
+    "logFile": "logs/exceptions.log",
+    "maxLogSize": 10485760,
+    "maxBackupIndex": 3
+  }
+} 
