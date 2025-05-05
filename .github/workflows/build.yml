@@ -9,156 +9,135 @@ on:
     branches: [ main ]
 
 jobs:
-  validate:
-    name: Validate
+  build-and-release:
+    name: Build, Test and Release
     runs-on: ubuntu-latest
+    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-        
-      - name: Set up JDK 17
-        uses: actions/setup-java@v3
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-          cache: maven
+      # Manual checkout instead of using actions/checkout
+      - name: Manual repository checkout
+        run: |
+          echo "Performing manual checkout"
+          # Create working directory
+          mkdir -p workspace
+          cd workspace
           
-      - name: Validate Maven project
-        run: mvn -B validate
-
-  build:
-    name: Build and Test
-    needs: validate
-    runs-on: ubuntu-latest
-    outputs:
-      artifact_name: ${{ steps.save_artifact_name.outputs.artifact_name }}
-      version: ${{ steps.get_version.outputs.version }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-        
-      - name: Set up JDK 17
-        uses: actions/setup-java@v3
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-          cache: maven
+          # Initialize git
+          git init
+          git remote add origin https://github.com/${{ github.repository }}.git
+          
+          if [[ "${{ github.ref }}" == refs/pull/* ]]; then
+            # For pull requests
+            git fetch origin ${{ github.ref }} --depth=1
+            git checkout FETCH_HEAD
+          else
+            # For branches and tags
+            git fetch origin ${{ github.ref }} --depth=1
+            git checkout FETCH_HEAD
+          fi
+          
+          # Set the workspace directory
+          echo "WORKSPACE=$(pwd)" >> $GITHUB_ENV
+          ls -la
+      
+      # Manual JDK setup instead of using actions/setup-java
+      - name: Setup JDK 17
+        run: |
+          echo "Setting up JDK 17"
+          # Install JDK if needed
+          sudo apt-get update
+          sudo apt-get install -y openjdk-17-jdk
+          export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+          export PATH=$JAVA_HOME/bin:$PATH
+          
+          # Add to GitHub ENV for other steps
+          echo "JAVA_HOME=$JAVA_HOME" >> $GITHUB_ENV
+          echo "PATH=$PATH" >> $GITHUB_ENV
+          
+          # Verify Java installation
+          java -version
+          javac -version
           
       - name: Build with Maven
-        run: mvn -B clean package
-      
-      - name: Get version from pom.xml
-        id: get_version
-        run: echo "version=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)" >> $GITHUB_OUTPUT
-        
-      - name: Create artifact directory
-        run: mkdir -p ./artifacts
-        
-      - name: Copy JAR to artifacts directory
         run: |
-          VERSION=${{ steps.get_version.outputs.version }}
-          ARTIFACT_NAME="noconsolespam-${VERSION}.jar"
-          echo "Copying $ARTIFACT_NAME to artifacts directory"
-          cp target/$ARTIFACT_NAME ./artifacts/
-          echo "artifact_name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
-        id: save_artifact_name
-        
-      - name: Create artifact archive
-        run: |
-          cd ./artifacts
-          ARTIFACT_ARCHIVE="noconsolespam-artifact.tar.gz"
-          tar -czf $ARTIFACT_ARCHIVE *.jar
-          echo "Created archive: $ARTIFACT_ARCHIVE"
-          cd ..
+          cd $WORKSPACE
+          echo "Building project with Maven"
+          mvn -B clean package
           
-      - name: Cache artifacts for release job
-        uses: actions/cache@v2
-        with:
-          path: ./artifacts
-          key: ${{ runner.os }}-artifacts-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-artifacts-
-            
+      - name: Extract version from pom.xml
+        id: version
+        run: |
+          cd $WORKSPACE
+          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Extracted version: $VERSION"
+          
       - name: Run tests
-        run: mvn -B test
-        
-  release:
-    name: Create Release
-    needs: build
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-        
-      - name: Restore cached artifacts
-        uses: actions/cache@v2
-        with:
-          path: ./artifacts
-          key: ${{ runner.os }}-artifacts-${{ github.sha }}
-        
-      - name: Verify artifacts exist
         run: |
-          if [ ! -d "./artifacts" ]; then
-            echo "Error: Artifacts directory not found!"
-            exit 1
-          fi
-          
-          ARTIFACT_NAME="${{ needs.build.outputs.artifact_name }}"
-          if [ ! -f "./artifacts/$ARTIFACT_NAME" ]; then
-            echo "Error: Artifact file not found: $ARTIFACT_NAME"
-            ls -la ./artifacts/
-            exit 1
-          fi
-          
-          echo "Artifact verified: ./artifacts/$ARTIFACT_NAME"
+          cd $WORKSPACE
+          echo "Running tests"
+          mvn -B test
       
+      - name: Prepare artifact directory
+        run: |
+          cd $WORKSPACE
+          echo "Preparing artifact directory"
+          mkdir -p artifacts
+          ARTIFACT_NAME="noconsolespam-$VERSION.jar"
+          cp target/$ARTIFACT_NAME artifacts/
+          echo "ARTIFACT_NAME=$ARTIFACT_NAME" >> $GITHUB_ENV
+          echo "Prepared artifact: $ARTIFACT_NAME"
+          ls -la artifacts/
+      
+      # Create release if it's a tag
       - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
         run: |
-          VERSION=${{ needs.build.outputs.version }}
-          ARTIFACT_PATH="./artifacts/noconsolespam-${VERSION}.jar"
+          cd $WORKSPACE
+          echo "Creating GitHub release for version $VERSION"
           
-          # Install GitHub CLI if not already installed
-          if ! command -v gh &> /dev/null; then
-            echo "Installing GitHub CLI..."
-            curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
-            echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
-            sudo apt update
-            sudo apt install gh
-          fi
+          # Install GitHub CLI
+          sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-key C99B11DEB97541F0
+          sudo apt-add-repository https://cli.github.com/packages
+          sudo apt update
+          sudo apt install -y gh
           
-          # Create release using GitHub CLI
-          gh release create "v${VERSION}" \
-            --title "NoConsoleSpam ${VERSION}" \
-            --notes "## NoConsoleSpam ${VERSION} Release
-            
-            ### Installation
-            1. Install [Fabric Loader](https://fabricmc.net/use/) for Minecraft 1.20.1
-            2. Download the JAR file
-            3. Place it in your Minecraft mods folder
-            
-            For more details, see the [README](https://github.com/${{ github.repository }}/blob/main/README.md)" \
-            "${ARTIFACT_PATH}"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Authenticate with GitHub CLI
+          echo "${{ github.token }}" | gh auth login --with-token
           
-  update-versions:
-    name: Update Versions Document
-    needs: [build, release]
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-        
-      - name: Update VERSIONS.md
+          # Create a release
+          ARTIFACT_PATH="artifacts/$ARTIFACT_NAME"
+          
+          # Create release notes
+          cat > release_notes.md << EOF
+          ## NoConsoleSpam $VERSION Release
+          
+          ### Installation
+          1. Install [Fabric Loader](https://fabricmc.net/use/) for Minecraft 1.20.1
+          2. Download the JAR file
+          3. Place it in your Minecraft mods folder
+          
+          For more details, see the [README](https://github.com/${{ github.repository }}/blob/main/README.md)
+          EOF
+          
+          # Create the release
+          gh release create "v$VERSION" \
+            --title "NoConsoleSpam $VERSION" \
+            --notes-file release_notes.md \
+            "$ARTIFACT_PATH"
+      
+      # Update VERSIONS.md if it's a tag
+      - name: Update VERSIONS Documentation
+        if: startsWith(github.ref, 'refs/tags/v')
         run: |
+          cd $WORKSPACE
+          echo "Updating VERSIONS.md for $VERSION"
+          
           # Get current date
           DATE=$(date +"%Y-%m-%d")
-          VERSION="${{ needs.build.outputs.version }}"
           
           # Prepare new version entry
-          NEW_ENTRY="## [${VERSION}](https://github.com/${{ github.repository }}/releases/tag/v${VERSION}) - $DATE\n\n- [Download JAR](https://github.com/${{ github.repository }}/releases/download/v${VERSION}/noconsolespam-${VERSION}.jar)\n- [View Changes](https://github.com/${{ github.repository }}/blob/main/CHANGES.md#$(echo ${VERSION} | sed 's/\\./-/g'))\n"
+          NEW_ENTRY="## [$VERSION](https://github.com/${{ github.repository }}/releases/tag/v$VERSION) - $DATE\n\n- [Download JAR](https://github.com/${{ github.repository }}/releases/download/v$VERSION/noconsolespam-$VERSION.jar)\n- [View Changes](https://github.com/${{ github.repository }}/blob/main/CHANGES.md#$(echo $VERSION | sed 's/\\./-/g'))\n"
           
           # If VERSIONS.md doesn't exist, create it
           if [ ! -f VERSIONS.md ]; then
@@ -168,12 +147,33 @@ jobs:
           # Add new entry after header
           awk -v new_entry="$NEW_ENTRY" 'NR==4{print new_entry}1' VERSIONS.md > VERSIONS.md.tmp && mv VERSIONS.md.tmp VERSIONS.md
           
-      - name: Commit and push VERSIONS.md update
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
+          # Configure Git for commit
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          # Commit the changes
           git add VERSIONS.md
-          git commit -m "Update VERSIONS.md for ${{ needs.build.outputs.version }}" || echo "No changes to commit"
-          git push
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
+          git commit -m "Update VERSIONS.md for $VERSION" || echo "No changes to commit"
+          
+          # Push using token authentication
+          git remote set-url origin https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git
+          git push origin HEAD:${GITHUB_REF#refs/heads/}
+          
+      # Upload artifacts as workflow artifacts for debugging
+      - name: Save artifacts for download
+        if: always()
+        run: |
+          cd $WORKSPACE
+          echo "Saving artifacts for download"
+          
+          # Create archive of artifacts
+          tar -czvf noconsolespam-build.tar.gz artifacts/
+          
+          # Move to a predictable location that GitHub actions can access
+          mkdir -p /tmp/artifacts
+          cp noconsolespam-build.tar.gz /tmp/artifacts/
+          
+          echo "Artifacts saved to /tmp/artifacts/noconsolespam-build.tar.gz"
+          
+          # Output artifact location for GitHub to find
+          echo "ARTIFACT_PATH=/tmp/artifacts/noconsolespam-build.tar.gz" >> $GITHUB_ENV 
