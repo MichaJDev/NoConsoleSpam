@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "noconsolespam",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "name": "NoConsoleSpam",
   "description": "A mod that reduces console spam by filtering out unnecessary messages",
   "authors": [

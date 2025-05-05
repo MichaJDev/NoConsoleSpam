@@ -2,6 +2,16 @@
 
 This document provides detailed information about changes in each version of NoConsoleSpam.
 
+## 1.2.1
+
+*Released: May 5, 2025*
+
+### Changes
+
+- Removed unused features for streamlined codebase
+- Simplified project structure
+- Optimized jar file size
+
 ## 1.2.0
 
 *Released: May 5, 2025*
@@ -12,10 +22,6 @@ This document provides detailed information about changes in each version of NoC
   - Each exception is now logged to a separate file in the "Console Errors" directory
   - Filenames include timestamp and exception type for easy identification
   - Improved exception handling with proper cleanup of old log files
-- Added color customization system
-  - New colorize.json file for defining console output colors
-  - Support for customizing log level colors and formats
-  - Minecraft color code integration for rich text formatting
 
 ### Technical Details
 
@@ -23,7 +29,6 @@ This document provides detailed information about changes in each version of NoC
 - Added sorting mechanism to manage log file retention based on age
 - Improved error reporting with better formatted exception details
 - Simplified configuration interface for exception handling
-- Implemented color parsing system for console output styling
 
 ### Fixed Issues
 

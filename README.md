@@ -13,7 +13,6 @@ A Minecraft Fabric mod that reduces console spam by filtering out unnecessary me
   - Support for custom patterns via configuration
 - External JSON configuration file for easy customization
 - Individual error logging to separate files for better debugging
-- Customizable color schemes for console output and logs
 - Lightweight and efficient
 - Compatible with Minecraft 1.20.1
 
@@ -58,28 +57,20 @@ Example configuration:
 }
 ```
 
-## Color Customization
-
-The mod includes a `colorize.json` file that allows you to customize the colors and formatting of console output and log files. This makes it easier to distinguish between different types of messages.
-
-You can customize:
-- Console output colors for different log levels (INFO, WARN, ERROR, DEBUG)
-- Exception log formatting
-- Mod status messages
-- Log format templates
-
-The file uses Minecraft's color code format (§ followed by a character) to define colors and formatting styles.
-
 ## Exception Logging
 
 Exceptions are now logged individually to separate files in the `Console Errors` directory. Each exception gets its own file with a timestamp and exception type in the filename. This makes debugging much easier as you can easily identify and review specific errors.
 
 ## Changelog
 
-### [1.2.0](CHANGES.md#120) - Current
+### [1.2.1](CHANGES.md#121) - Current
+- Streamlined codebase by removing unused features
+- Optimized jar file size
+- Simplified project structure
+
+### [1.2.0](CHANGES.md#120)
 - Added individual error logging to separate files in "Console Errors" directory
 - Improved exception handling and logging
-- Added colorize.json for customizable message formatting
 
 ### [1.1.0](CHANGES.md#110)
 - Added external configuration file support
