@@ -30,42 +30,9 @@ jobs:
     name: Build and Test
     needs: validate
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-        
-      - name: Set up JDK 17
-        uses: actions/setup-java@v3
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-          cache: maven
-          
-      - name: Build with Maven
-        run: mvn -B clean package
-        
-      - name: Store JAR artifact
-        run: |
-          mkdir -p ./artifacts
-          cp target/noconsolespam-*.jar ./artifacts/
-          
-      - name: Upload build artifacts
-        # Use a simple approach that doesn't rely on external actions
-        uses: actions/upload-artifact@v2.3.1
-        with:
-          name: noconsolespam-jar
-          path: ./artifacts/*.jar
-          if-no-files-found: error
-          retention-days: 7
-          
-      - name: Run tests
-        run: mvn -B test
-        
-  release:
-    name: Create Release
-    needs: build
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    outputs:
+      artifact_name: ${{ steps.save_artifact_name.outputs.artifact_name }}
+      version: ${{ steps.get_version.outputs.version }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
@@ -82,18 +49,83 @@ jobs:
       
       - name: Get version from pom.xml
         id: get_version
-        run: echo "VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)" >> $GITHUB_OUTPUT
+        run: echo "version=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)" >> $GITHUB_OUTPUT
         
-      - name: Download artifacts from build job
-        uses: actions/download-artifact@v2
+      - name: Create artifact directory
+        run: mkdir -p ./artifacts
+        
+      - name: Copy JAR to artifacts directory
+        run: |
+          VERSION=${{ steps.get_version.outputs.version }}
+          ARTIFACT_NAME="noconsolespam-${VERSION}.jar"
+          echo "Copying $ARTIFACT_NAME to artifacts directory"
+          cp target/$ARTIFACT_NAME ./artifacts/
+          echo "artifact_name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
+        id: save_artifact_name
+        
+      - name: Create artifact archive
+        run: |
+          cd ./artifacts
+          ARTIFACT_ARCHIVE="noconsolespam-artifact.tar.gz"
+          tar -czf $ARTIFACT_ARCHIVE *.jar
+          echo "Created archive: $ARTIFACT_ARCHIVE"
+          cd ..
+          
+      - name: Cache artifacts for release job
+        uses: actions/cache@v2
         with:
-          name: noconsolespam-jar
           path: ./artifacts
+          key: ${{ runner.os }}-artifacts-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-artifacts-
+            
+      - name: Run tests
+        run: mvn -B test
         
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        
+      - name: Restore cached artifacts
+        uses: actions/cache@v2
+        with:
+          path: ./artifacts
+          key: ${{ runner.os }}-artifacts-${{ github.sha }}
+        
+      - name: Verify artifacts exist
+        run: |
+          if [ ! -d "./artifacts" ]; then
+            echo "Error: Artifacts directory not found!"
+            exit 1
+          fi
+          
+          ARTIFACT_NAME="${{ needs.build.outputs.artifact_name }}"
+          if [ ! -f "./artifacts/$ARTIFACT_NAME" ]; then
+            echo "Error: Artifact file not found: $ARTIFACT_NAME"
+            ls -la ./artifacts/
+            exit 1
+          fi
+          
+          echo "Artifact verified: ./artifacts/$ARTIFACT_NAME"
+      
       - name: Create GitHub Release
         run: |
-          VERSION=${{ steps.get_version.outputs.VERSION }}
+          VERSION=${{ needs.build.outputs.version }}
           ARTIFACT_PATH="./artifacts/noconsolespam-${VERSION}.jar"
+          
+          # Install GitHub CLI if not already installed
+          if ! command -v gh &> /dev/null; then
+            echo "Installing GitHub CLI..."
+            curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+            echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+            sudo apt update
+            sudo apt install gh
+          fi
           
           # Create release using GitHub CLI
           gh release create "v${VERSION}" \
@@ -112,30 +144,21 @@ jobs:
           
   update-versions:
     name: Update Versions Document
-    needs: release
+    needs: [build, release]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
         
-      - name: Set up JDK 17
-        uses: actions/setup-java@v3
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-          
-      - name: Get version from pom.xml
-        id: get_version
-        run: echo "VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)" >> $GITHUB_OUTPUT
-        
       - name: Update VERSIONS.md
         run: |
           # Get current date
           DATE=$(date +"%Y-%m-%d")
+          VERSION="${{ needs.build.outputs.version }}"
           
           # Prepare new version entry
-          NEW_ENTRY="## [${{ steps.get_version.outputs.VERSION }}](https://github.com/${{ github.repository }}/releases/tag/v${{ steps.get_version.outputs.VERSION }}) - $DATE\n\n- [Download JAR](https://github.com/${{ github.repository }}/releases/download/v${{ steps.get_version.outputs.VERSION }}/noconsolespam-${{ steps.get_version.outputs.VERSION }}.jar)\n- [View Changes](https://github.com/${{ github.repository }}/blob/main/CHANGES.md#$(echo ${{ steps.get_version.outputs.VERSION }} | sed 's/\\./-/g'))\n"
+          NEW_ENTRY="## [${VERSION}](https://github.com/${{ github.repository }}/releases/tag/v${VERSION}) - $DATE\n\n- [Download JAR](https://github.com/${{ github.repository }}/releases/download/v${VERSION}/noconsolespam-${VERSION}.jar)\n- [View Changes](https://github.com/${{ github.repository }}/blob/main/CHANGES.md#$(echo ${VERSION} | sed 's/\\./-/g'))\n"
           
           # If VERSIONS.md doesn't exist, create it
           if [ ! -f VERSIONS.md ]; then
@@ -150,7 +173,7 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add VERSIONS.md
-          git commit -m "Update VERSIONS.md for ${{ steps.get_version.outputs.VERSION }}" || echo "No changes to commit"
+          git commit -m "Update VERSIONS.md for ${{ needs.build.outputs.version }}" || echo "No changes to commit"
           git push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
