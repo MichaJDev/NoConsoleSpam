@@ -8,14 +8,31 @@ on:
   pull_request:
     branches: [ main ]
 
+env:
+  CACHE_DIR: /tmp/build-cache
+  ARTIFACT_DIR: /tmp/build-artifacts
+  RELEASE_DIR: /tmp/release-artifacts
+  REPO_DIR: /tmp/repository
+
 jobs:
   setup:
     name: Repository Setup
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.extract_version.outputs.version }}
     steps:
+      - name: Create workspace directories
+        run: |
+          echo "Creating workspace and cache directories"
+          mkdir -p ${{ env.CACHE_DIR }}
+          mkdir -p ${{ env.ARTIFACT_DIR }}
+          mkdir -p ${{ env.RELEASE_DIR }}
+          mkdir -p ${{ env.REPO_DIR }}
+      
       - name: Manual repository checkout
         run: |
           echo "Performing manual checkout"
+          cd ${{ env.REPO_DIR }}
           git clone https://github.com/${{ github.repository }}.git .
           
           if [[ "${{ github.ref }}" == refs/pull/* ]]; then
@@ -53,36 +70,89 @@ jobs:
           javac -version
       
       - name: Extract version from pom.xml
-        id: version
+        id: extract_version
         run: |
+          cd ${{ env.REPO_DIR }}
           VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Extracted version: $VERSION"
+          
+          # Save version to a file for other jobs
+          echo "$VERSION" > ${{ env.CACHE_DIR }}/version.txt
       
-      - name: Cache Maven packages
-        uses: actions/cache@v3
-        with:
-          path: ~/.m2
-          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
-          restore-keys: ${{ runner.os }}-m2
+      - name: Cache Maven dependencies
+        run: |
+          echo "Setting up Maven cache"
+          # Check if Maven cache exists
+          if [ -d ~/.m2 ]; then
+            echo "Maven cache directory exists"
+          else
+            echo "Creating Maven cache directory"
+            mkdir -p ~/.m2
+          fi
+          
+          # Copy Maven settings to cache locations
+          cd ${{ env.REPO_DIR }}
+          if [ -f pom.xml ]; then
+            echo "Found pom.xml, copying to cache"
+            cp pom.xml ${{ env.CACHE_DIR }}/pom.xml
+          else
+            echo "Warning: pom.xml not found"
+          fi
 
   build:
     name: Build Project
     needs: setup
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.extract_version.outputs.version }}
     steps:
-      - name: Repository checkout
-        uses: actions/checkout@v3
+      - name: Manual repository checkout
+        run: |
+          echo "Performing manual checkout for build job"
+          mkdir -p ${{ env.REPO_DIR }}
+          cd ${{ env.REPO_DIR }}
+          git clone https://github.com/${{ github.repository }}.git .
+          
+          if [[ "${{ github.ref }}" == refs/pull/* ]]; then
+            git fetch origin ${{ github.ref }} --depth=1
+            git checkout FETCH_HEAD
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            git fetch --depth=1 origin +${{ github.ref }}:${{ github.ref }}
+            git checkout ${{ github.ref }}
+          else
+            git checkout ${{ github.ref_name }}
+          fi
       
       - name: Setup JDK 17
-        uses: actions/setup-java@v3
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-          cache: maven
+        run: |
+          echo "Setting up JDK 17 for build job"
+          java -version || {
+            echo "Java not found, installing OpenJDK 17"
+            sudo apt-get update
+            sudo apt-get install -y openjdk-17-jdk
+          }
+          
+          export JAVA_HOME=$(dirname $(dirname $(readlink -f $(which javac))))
+          echo "JAVA_HOME=$JAVA_HOME" >> $GITHUB_ENV
+          echo "PATH=$PATH:$JAVA_HOME/bin" >> $GITHUB_ENV
+      
+      - name: Restore Maven cache
+        run: |
+          echo "Restoring Maven cache"
+          mkdir -p ${{ env.CACHE_DIR }}
+          
+          # Use Maven cache if available
+          if [ -d ~/.m2 ]; then
+            echo "Maven cache directory exists"
+          else
+            echo "Creating Maven cache directory"
+            mkdir -p ~/.m2
+          fi
       
       - name: Build with Maven
         run: |
+          cd ${{ env.REPO_DIR }}
           echo "Building project with Maven"
           mvn -B clean package
           
@@ -94,38 +164,75 @@ jobs:
           
           echo "Build directory contents:"
           ls -la target/
+          
+          # Create artifact directory and copy build artifacts
+          mkdir -p ${{ env.ARTIFACT_DIR }}/target
+          cp -r target/* ${{ env.ARTIFACT_DIR }}/target/
+          
+          echo "Copied build artifacts to shared location"
+          ls -la ${{ env.ARTIFACT_DIR }}/target/
       
       - name: Extract version from pom.xml
-        id: version
+        id: extract_version
         run: |
+          cd ${{ env.REPO_DIR }}
           VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Extracted version: $VERSION"
-      
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: build-artifacts
-          path: target/
-          retention-days: 1
+          
+          # Save version to a file for other jobs
+          mkdir -p ${{ env.CACHE_DIR }}
+          echo "$VERSION" > ${{ env.CACHE_DIR }}/version.txt
 
   test:
     name: Run Tests
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Repository checkout
-        uses: actions/checkout@v3
+      - name: Manual repository checkout
+        run: |
+          echo "Performing manual checkout for test job"
+          mkdir -p ${{ env.REPO_DIR }}
+          cd ${{ env.REPO_DIR }}
+          git clone https://github.com/${{ github.repository }}.git .
+          
+          if [[ "${{ github.ref }}" == refs/pull/* ]]; then
+            git fetch origin ${{ github.ref }} --depth=1
+            git checkout FETCH_HEAD
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            git fetch --depth=1 origin +${{ github.ref }}:${{ github.ref }}
+            git checkout ${{ github.ref }}
+          else
+            git checkout ${{ github.ref_name }}
+          fi
       
       - name: Setup JDK 17
-        uses: actions/setup-java@v3
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-          cache: maven
+        run: |
+          echo "Setting up JDK 17 for test job"
+          java -version || {
+            echo "Java not found, installing OpenJDK 17"
+            sudo apt-get update
+            sudo apt-get install -y openjdk-17-jdk
+          }
+          
+          export JAVA_HOME=$(dirname $(dirname $(readlink -f $(which javac))))
+          echo "JAVA_HOME=$JAVA_HOME" >> $GITHUB_ENV
+          echo "PATH=$PATH:$JAVA_HOME/bin" >> $GITHUB_ENV
+      
+      - name: Restore Maven cache
+        run: |
+          echo "Restoring Maven cache for tests"
+          # Use Maven cache if available
+          if [ -d ~/.m2 ]; then
+            echo "Maven cache directory exists"
+          else
+            echo "Creating Maven cache directory"
+            mkdir -p ~/.m2
+          fi
       
       - name: Run tests
         run: |
+          cd ${{ env.REPO_DIR }}
           echo "Running tests"
           mvn -B test
 
@@ -133,67 +240,91 @@ jobs:
     name: Prepare Release Artifacts
     needs: [build, test]
     runs-on: ubuntu-latest
+    outputs:
+      artifact_name: ${{ steps.prepare_artifacts.outputs.artifact_name }}
+      version: ${{ steps.get_version.outputs.version }}
     steps:
-      - name: Repository checkout
-        uses: actions/checkout@v3
-      
-      - name: Setup JDK 17
-        uses: actions/setup-java@v3
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-          cache: maven
-      
-      - name: Download build artifacts
-        uses: actions/download-artifact@v3
-        with:
-          name: build-artifacts
-          path: target/
-      
-      - name: Extract version from pom.xml
-        id: version
+      - name: Get version information
+        id: get_version
         run: |
-          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          mkdir -p ${{ env.CACHE_DIR }}
+          if [ -f "${{ env.CACHE_DIR }}/version.txt" ]; then
+            VERSION=$(cat ${{ env.CACHE_DIR }}/version.txt)
+          else
+            # Fallback to extracting from repository
+            echo "Version file not found, checking out repository"
+            mkdir -p ${{ env.REPO_DIR }}
+            cd ${{ env.REPO_DIR }}
+            git clone https://github.com/${{ github.repository }}.git .
+            VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+            echo "$VERSION" > ${{ env.CACHE_DIR }}/version.txt
+          fi
+          
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Extracted version: $VERSION"
+          echo "Using version: $VERSION"
       
       - name: Prepare release artifacts
+        id: prepare_artifacts
         run: |
-          echo "Preparing release artifacts"
+          VERSION="${{ steps.get_version.outputs.version }}"
+          echo "Preparing release artifacts for version $VERSION"
+          
           # Create artifacts directory
-          mkdir -p artifacts
+          mkdir -p ${{ env.RELEASE_DIR }}
+          
+          # Copy build artifacts if needed
+          if [ ! -d "${{ env.ARTIFACT_DIR }}/target" ]; then
+            echo "ERROR: Build artifacts not found, checking out and rebuilding"
+            mkdir -p ${{ env.REPO_DIR }}
+            cd ${{ env.REPO_DIR }}
+            git clone https://github.com/${{ github.repository }}.git .
+            
+            if [[ "${{ github.ref }}" == refs/pull/* ]]; then
+              git fetch origin ${{ github.ref }} --depth=1
+              git checkout FETCH_HEAD
+            elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+              git fetch --depth=1 origin +${{ github.ref }}:${{ github.ref }}
+              git checkout ${{ github.ref }}
+            else
+              git checkout ${{ github.ref_name }}
+            fi
+            
+            # Setup JDK
+            java -version || {
+              sudo apt-get update
+              sudo apt-get install -y openjdk-17-jdk
+            }
+            
+            # Build again
+            mvn -B clean package
+            mkdir -p ${{ env.ARTIFACT_DIR }}/target
+            cp -r target/* ${{ env.ARTIFACT_DIR }}/target/
+          fi
           
           # Find exact JAR file
-          ARTIFACT_NAME="noconsolespam-${{ steps.version.outputs.version }}.jar"
-          ARTIFACT_PATH="target/$ARTIFACT_NAME"
+          ARTIFACT_NAME="noconsolespam-$VERSION.jar"
+          SOURCE_PATH="${{ env.ARTIFACT_DIR }}/target/$ARTIFACT_NAME"
           
-          if [ ! -f "$ARTIFACT_PATH" ]; then
-            echo "ERROR: JAR file not found at expected path: $ARTIFACT_PATH"
+          if [ ! -f "$SOURCE_PATH" ]; then
+            echo "ERROR: JAR file not found at expected path: $SOURCE_PATH"
             echo "Contents of target directory:"
-            ls -la target/
+            ls -la ${{ env.ARTIFACT_DIR }}/target/
             exit 1
           fi
           
-          # Copy JAR to artifacts directory with verbose output
-          echo "Copying $ARTIFACT_PATH to artifacts/$ARTIFACT_NAME"
-          cp -v "$ARTIFACT_PATH" "artifacts/$ARTIFACT_NAME"
+          # Copy JAR to release directory with verbose output
+          echo "Copying $SOURCE_PATH to ${{ env.RELEASE_DIR }}/$ARTIFACT_NAME"
+          cp -v "$SOURCE_PATH" "${{ env.RELEASE_DIR }}/$ARTIFACT_NAME"
           
-          echo "Artifacts directory contents:"
-          ls -la artifacts/
+          echo "Release directory contents:"
+          ls -la ${{ env.RELEASE_DIR }}/
           
           # Create artifact archive
           echo "Creating artifact archive"
-          tar -czvf artifacts/noconsolespam-build.tar.gz artifacts/$ARTIFACT_NAME
+          tar -czvf ${{ env.RELEASE_DIR }}/noconsolespam-build.tar.gz -C ${{ env.RELEASE_DIR }} $ARTIFACT_NAME
           
           # Save artifact name for later reference
           echo "artifact_name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
-      
-      - name: Upload release artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: release-artifacts
-          path: artifacts/
-          retention-days: 1
 
   create-release:
     name: Create GitHub Release
@@ -201,25 +332,16 @@ jobs:
     needs: prepare-artifacts
     runs-on: ubuntu-latest
     steps:
-      - name: Repository checkout
-        uses: actions/checkout@v3
-      
-      - name: Download release artifacts
-        uses: actions/download-artifact@v3
-        with:
-          name: release-artifacts
-          path: artifacts/
-      
-      - name: Extract version from pom.xml
-        id: version
+      - name: Get version information
         run: |
+          # Extract version from tag
           VERSION=$(echo ${{ github.ref_name }} | sed 's/^v//')
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Extracted version: $VERSION"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Using version from tag: $VERSION"
       
-      - name: Create GitHub Release
+      - name: Setup release environment
         run: |
-          echo "Creating GitHub release for version ${{ steps.version.outputs.version }}"
+          echo "Setting up release environment"
           
           # Install GitHub CLI
           type -p curl >/dev/null || sudo apt install curl -y
@@ -231,22 +353,53 @@ jobs:
           
           # Authenticate with GitHub CLI
           echo "${{ github.token }}" | gh auth login --with-token
+      
+      - name: Verify release artifact
+        run: |
+          ARTIFACT_NAME="noconsolespam-$VERSION.jar"
+          ARTIFACT_PATH="${{ env.RELEASE_DIR }}/$ARTIFACT_NAME"
           
-          # Find artifact
-          ARTIFACT_NAME="noconsolespam-${{ steps.version.outputs.version }}.jar"
-          ARTIFACT_PATH="artifacts/$ARTIFACT_NAME"
-          
-          # Verify artifact exists
+          # Check if artifact exists
           if [ ! -f "$ARTIFACT_PATH" ]; then
-            echo "ERROR: JAR file not found at: $ARTIFACT_PATH"
-            echo "Contents of artifacts directory:"
-            ls -la artifacts/
-            exit 1
+            echo "ERROR: Release artifact not found, retrieving from previous job"
+            mkdir -p ${{ env.RELEASE_DIR }}
+            
+            # Check out repository to get artifact from scratch if needed
+            mkdir -p ${{ env.REPO_DIR }}
+            cd ${{ env.REPO_DIR }}
+            git clone https://github.com/${{ github.repository }}.git .
+            
+            if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+              git fetch --depth=1 origin +${{ github.ref }}:${{ github.ref }}
+              git checkout ${{ github.ref }}
+            fi
+            
+            # Setup JDK
+            java -version || {
+              sudo apt-get update
+              sudo apt-get install -y openjdk-17-jdk
+            }
+            
+            # Build
+            mvn -B clean package
+            
+            # Copy to release directory
+            cp -v "target/$ARTIFACT_NAME" "${{ env.RELEASE_DIR }}/$ARTIFACT_NAME"
           fi
+          
+          echo "Release artifact verified at: $ARTIFACT_PATH"
+          ls -la ${{ env.RELEASE_DIR }}/
+      
+      - name: Create GitHub Release
+        run: |
+          echo "Creating GitHub release for version $VERSION"
+          
+          ARTIFACT_NAME="noconsolespam-$VERSION.jar"
+          ARTIFACT_PATH="${{ env.RELEASE_DIR }}/$ARTIFACT_NAME"
           
           # Create release notes
           cat > release_notes.md << EOF
-          ## NoConsoleSpam ${{ steps.version.outputs.version }} Release
+          ## NoConsoleSpam $VERSION Release
           
           ### Installation
           1. Install [Fabric Loader](https://fabricmc.net/use/) for Minecraft 1.20.1
@@ -259,7 +412,7 @@ jobs:
           # Create the release
           echo "Creating release with artifact: $ARTIFACT_PATH"
           gh release create "${{ github.ref_name }}" \
-            --title "NoConsoleSpam ${{ steps.version.outputs.version }}" \
+            --title "NoConsoleSpam $VERSION" \
             --notes-file release_notes.md \
             "$ARTIFACT_PATH"
 
@@ -269,29 +422,38 @@ jobs:
     needs: create-release
     runs-on: ubuntu-latest
     steps:
-      - name: Repository checkout
-        uses: actions/checkout@v3
+      - name: Manual repository checkout
+        run: |
+          echo "Checking out repository for documentation update"
+          mkdir -p ${{ env.REPO_DIR }}
+          cd ${{ env.REPO_DIR }}
+          git clone https://github.com/${{ github.repository }}.git .
+          
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            git fetch --depth=1 origin +${{ github.ref }}:${{ github.ref }}
+            git checkout ${{ github.ref }}
+          fi
       
       - name: Extract version from tag
-        id: version
         run: |
           VERSION=$(echo ${{ github.ref_name }} | sed 's/^v//')
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Extracted version: $VERSION"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Using version from tag: $VERSION"
       
       - name: Update VERSIONS Documentation
         run: |
-          echo "Updating VERSIONS.md for ${{ steps.version.outputs.version }}"
+          cd ${{ env.REPO_DIR }}
+          echo "Updating VERSIONS.md for $VERSION"
           
           # Get current date
           DATE=$(date +"%Y-%m-%d")
           
           # Prepare new version entry
-          NEW_ENTRY="## [${{ steps.version.outputs.version }}](https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}) - $DATE\n\n- [Download JAR](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/noconsolespam-${{ steps.version.outputs.version }}.jar)\n- [View Changes](https://github.com/${{ github.repository }}/blob/main/CHANGES.md#$(echo ${{ steps.version.outputs.version }} | sed 's/\\./-/g'))\n"
+          NEW_ENTRY="## [$VERSION](https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}) - $DATE\n\n- [Download JAR](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/noconsolespam-$VERSION.jar)\n- [View Changes](https://github.com/${{ github.repository }}/blob/main/CHANGES.md#$(echo $VERSION | sed 's/\\./-/g'))\n"
           
           # If VERSIONS.md doesn't exist, create it
           if [ ! -f VERSIONS.md ]; then
-            echo "# NoConsoleSpam Versions\n\nThis document provides links to all released versions of NoConsoleSpam.\n" > VERSIONS.md
+            echo -e "# NoConsoleSpam Versions\n\nThis document provides links to all released versions of NoConsoleSpam.\n" > VERSIONS.md
           fi
           
           # Add new entry after header
@@ -303,7 +465,7 @@ jobs:
           
           # Commit the changes
           git add VERSIONS.md
-          git commit -m "Update VERSIONS.md for ${{ steps.version.outputs.version }}" || echo "No changes to commit"
+          git commit -m "Update VERSIONS.md for $VERSION" || echo "No changes to commit"
           
           # Push using token authentication
           git remote set-url origin https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git
@@ -315,33 +477,35 @@ jobs:
     needs: [setup, build, test, prepare-artifacts]
     runs-on: ubuntu-latest
     steps:
-      - name: Repository checkout
-        uses: actions/checkout@v3
-      
-      - name: Download build artifacts
-        uses: actions/download-artifact@v3
-        with:
-          name: build-artifacts
-          path: target/
-          
-      - name: Download release artifacts
-        uses: actions/download-artifact@v3
-        with:
-          name: release-artifacts
-          path: artifacts/
-          
-      - name: Debug information
+      - name: Display debug information
         run: |
           echo "=== Debug Information ==="
           echo "Current directory: $(pwd)"
-          echo "Repository contents:"
-          ls -la
           
-          echo "Target directory contents:"
-          ls -la target/ || echo "No target directory found"
+          echo "Repository information:"
+          if [ -d "${{ env.REPO_DIR }}" ]; then
+            ls -la ${{ env.REPO_DIR }}
+          else
+            echo "Repository directory not found"
+          fi
           
-          echo "Artifacts directory contents:"
-          ls -la artifacts/ || echo "No artifacts directory found"
+          echo "Build artifacts:"
+          if [ -d "${{ env.ARTIFACT_DIR }}/target" ]; then
+            ls -la ${{ env.ARTIFACT_DIR }}/target/
+          else
+            echo "Build artifacts not found"
+          fi
           
-          echo "Environment variables:"
-          echo "VERSION: $(mvn help:evaluate -Dexpression=project.version -q -DforceStdout || echo 'N/A')" 
+          echo "Release artifacts:"
+          if [ -d "${{ env.RELEASE_DIR }}" ]; then
+            ls -la ${{ env.RELEASE_DIR }}/
+          else
+            echo "Release directory not found"
+          fi
+          
+          echo "Version information:"
+          if [ -f "${{ env.CACHE_DIR }}/version.txt" ]; then
+            echo "VERSION: $(cat ${{ env.CACHE_DIR }}/version.txt)"
+          else
+            echo "Version file not found"
+          fi 
