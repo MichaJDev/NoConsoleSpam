@@ -27,13 +27,15 @@ jobs:
           mkdir -p ${{ env.CACHE_DIR }}
           mkdir -p ${{ env.ARTIFACT_DIR }}
           mkdir -p ${{ env.RELEASE_DIR }}
+          rm -rf ${{ env.REPO_DIR }} || true
           mkdir -p ${{ env.REPO_DIR }}
       
       - name: Manual repository checkout
         run: |
           echo "Performing manual checkout"
           cd ${{ env.REPO_DIR }}
-          git clone https://github.com/${{ github.repository }}.git .
+          git clone https://github.com/${{ github.repository }}.git ./repo
+          cd repo
           
           if [[ "${{ github.ref }}" == refs/pull/* ]]; then
             # For pull requests
@@ -72,7 +74,7 @@ jobs:
       - name: Extract version from pom.xml
         id: extract_version
         run: |
-          cd ${{ env.REPO_DIR }}
+          cd ${{ env.REPO_DIR }}/repo
           VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Extracted version: $VERSION"
@@ -92,7 +94,7 @@ jobs:
           fi
           
           # Copy Maven settings to cache locations
-          cd ${{ env.REPO_DIR }}
+          cd ${{ env.REPO_DIR }}/repo
           if [ -f pom.xml ]; then
             echo "Found pom.xml, copying to cache"
             cp pom.xml ${{ env.CACHE_DIR }}/pom.xml
@@ -107,12 +109,20 @@ jobs:
     outputs:
       version: ${{ steps.extract_version.outputs.version }}
     steps:
+      - name: Create workspace directories
+        run: |
+          echo "Creating build workspace directories"
+          mkdir -p ${{ env.CACHE_DIR }}
+          mkdir -p ${{ env.ARTIFACT_DIR }}
+          rm -rf ${{ env.REPO_DIR }}_build || true
+          mkdir -p ${{ env.REPO_DIR }}_build
+      
       - name: Manual repository checkout
         run: |
           echo "Performing manual checkout for build job"
-          mkdir -p ${{ env.REPO_DIR }}
-          cd ${{ env.REPO_DIR }}
-          git clone https://github.com/${{ github.repository }}.git .
+          cd ${{ env.REPO_DIR }}_build
+          git clone https://github.com/${{ github.repository }}.git ./repo
+          cd repo
           
           if [[ "${{ github.ref }}" == refs/pull/* ]]; then
             git fetch origin ${{ github.ref }} --depth=1
@@ -123,6 +133,9 @@ jobs:
           else
             git checkout ${{ github.ref_name }}
           fi
+          
+          echo "Repository contents:"
+          ls -la
       
       - name: Setup JDK 17
         run: |
@@ -152,7 +165,7 @@ jobs:
       
       - name: Build with Maven
         run: |
-          cd ${{ env.REPO_DIR }}
+          cd ${{ env.REPO_DIR }}_build/repo
           echo "Building project with Maven"
           mvn -B clean package
           
@@ -175,7 +188,7 @@ jobs:
       - name: Extract version from pom.xml
         id: extract_version
         run: |
-          cd ${{ env.REPO_DIR }}
+          cd ${{ env.REPO_DIR }}_build/repo
           VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Extracted version: $VERSION"
@@ -189,12 +202,19 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - name: Create workspace directories
+        run: |
+          echo "Creating test workspace directories"
+          mkdir -p ${{ env.CACHE_DIR }}
+          rm -rf ${{ env.REPO_DIR }}_test || true
+          mkdir -p ${{ env.REPO_DIR }}_test
+      
       - name: Manual repository checkout
         run: |
           echo "Performing manual checkout for test job"
-          mkdir -p ${{ env.REPO_DIR }}
-          cd ${{ env.REPO_DIR }}
-          git clone https://github.com/${{ github.repository }}.git .
+          cd ${{ env.REPO_DIR }}_test
+          git clone https://github.com/${{ github.repository }}.git ./repo
+          cd repo
           
           if [[ "${{ github.ref }}" == refs/pull/* ]]; then
             git fetch origin ${{ github.ref }} --depth=1
@@ -232,7 +252,7 @@ jobs:
       
       - name: Run tests
         run: |
-          cd ${{ env.REPO_DIR }}
+          cd ${{ env.REPO_DIR }}_test/repo
           echo "Running tests"
           mvn -B test
 
@@ -244,6 +264,14 @@ jobs:
       artifact_name: ${{ steps.prepare_artifacts.outputs.artifact_name }}
       version: ${{ steps.get_version.outputs.version }}
     steps:
+      - name: Create workspace directories
+        run: |
+          echo "Creating artifact workspace directories"
+          mkdir -p ${{ env.CACHE_DIR }}
+          mkdir -p ${{ env.RELEASE_DIR }}
+          rm -rf ${{ env.REPO_DIR }}_artifacts || true
+          mkdir -p ${{ env.REPO_DIR }}_artifacts
+      
       - name: Get version information
         id: get_version
         run: |
@@ -253,9 +281,9 @@ jobs:
           else
             # Fallback to extracting from repository
             echo "Version file not found, checking out repository"
-            mkdir -p ${{ env.REPO_DIR }}
-            cd ${{ env.REPO_DIR }}
-            git clone https://github.com/${{ github.repository }}.git .
+            cd ${{ env.REPO_DIR }}_artifacts
+            git clone https://github.com/${{ github.repository }}.git ./repo
+            cd repo
             VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
             echo "$VERSION" > ${{ env.CACHE_DIR }}/version.txt
           fi
@@ -275,9 +303,9 @@ jobs:
           # Copy build artifacts if needed
           if [ ! -d "${{ env.ARTIFACT_DIR }}/target" ]; then
             echo "ERROR: Build artifacts not found, checking out and rebuilding"
-            mkdir -p ${{ env.REPO_DIR }}
-            cd ${{ env.REPO_DIR }}
-            git clone https://github.com/${{ github.repository }}.git .
+            cd ${{ env.REPO_DIR }}_artifacts
+            git clone https://github.com/${{ github.repository }}.git ./repo
+            cd repo
             
             if [[ "${{ github.ref }}" == refs/pull/* ]]; then
               git fetch origin ${{ github.ref }} --depth=1
@@ -332,6 +360,13 @@ jobs:
     needs: prepare-artifacts
     runs-on: ubuntu-latest
     steps:
+      - name: Create workspace directories
+        run: |
+          echo "Creating release workspace directories"
+          mkdir -p ${{ env.RELEASE_DIR }}
+          rm -rf ${{ env.REPO_DIR }}_release || true
+          mkdir -p ${{ env.REPO_DIR }}_release
+      
       - name: Get version information
         run: |
           # Extract version from tag
@@ -365,9 +400,9 @@ jobs:
             mkdir -p ${{ env.RELEASE_DIR }}
             
             # Check out repository to get artifact from scratch if needed
-            mkdir -p ${{ env.REPO_DIR }}
-            cd ${{ env.REPO_DIR }}
-            git clone https://github.com/${{ github.repository }}.git .
+            cd ${{ env.REPO_DIR }}_release
+            git clone https://github.com/${{ github.repository }}.git ./repo
+            cd repo
             
             if [[ "${{ github.ref }}" == refs/tags/* ]]; then
               git fetch --depth=1 origin +${{ github.ref }}:${{ github.ref }}
@@ -422,12 +457,18 @@ jobs:
     needs: create-release
     runs-on: ubuntu-latest
     steps:
+      - name: Create workspace directories
+        run: |
+          echo "Creating documentation workspace directories"
+          rm -rf ${{ env.REPO_DIR }}_docs || true
+          mkdir -p ${{ env.REPO_DIR }}_docs
+      
       - name: Manual repository checkout
         run: |
           echo "Checking out repository for documentation update"
-          mkdir -p ${{ env.REPO_DIR }}
-          cd ${{ env.REPO_DIR }}
-          git clone https://github.com/${{ github.repository }}.git .
+          cd ${{ env.REPO_DIR }}_docs
+          git clone https://github.com/${{ github.repository }}.git ./repo
+          cd repo
           
           if [[ "${{ github.ref }}" == refs/tags/* ]]; then
             git fetch --depth=1 origin +${{ github.ref }}:${{ github.ref }}
@@ -442,7 +483,7 @@ jobs:
       
       - name: Update VERSIONS Documentation
         run: |
-          cd ${{ env.REPO_DIR }}
+          cd ${{ env.REPO_DIR }}_docs/repo
           echo "Updating VERSIONS.md for $VERSION"
           
           # Get current date
@@ -483,11 +524,12 @@ jobs:
           echo "Current directory: $(pwd)"
           
           echo "Repository information:"
-          if [ -d "${{ env.REPO_DIR }}" ]; then
-            ls -la ${{ env.REPO_DIR }}
-          else
-            echo "Repository directory not found"
-          fi
+          for DIR in "${{ env.REPO_DIR }}" "${{ env.REPO_DIR }}_build" "${{ env.REPO_DIR }}_test" "${{ env.REPO_DIR }}_artifacts" "${{ env.REPO_DIR }}_release" "${{ env.REPO_DIR }}_docs"; do
+            if [ -d "$DIR" ]; then
+              echo "Contents of $DIR:"
+              ls -la "$DIR"
+            fi
+          done
           
           echo "Build artifacts:"
           if [ -d "${{ env.ARTIFACT_DIR }}/target" ]; then
