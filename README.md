@@ -67,21 +67,21 @@ Exceptions are now logged individually to separate files in the `Console Errors`
 
 ## Changelog
 
-### [1.2.1](CHANGES.md#121) - Current
+### [1.2.1] - Current
 - Streamlined codebase by removing unused features
 - Optimized jar file size
 - Simplified project structure
 
-### [1.2.0](CHANGES.md#120)
+### [1.2.0]
 - Added individual error logging to separate files in "Console Errors" directory
 - Improved exception handling and logging
 
-### [1.1.0](CHANGES.md#110)
+### [1.1.0]
 - Added external configuration file support
 - Moved spam filters to config/NoConsoleSpam/spamfilters.json
 - Added more default spam patterns
 
-### [1.0.0](CHANGES.md#100)
+### [1.0.0]
 - Initial release
 - Basic console spam filtering
 
