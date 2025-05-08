@@ -67,7 +67,7 @@ Exceptions are now logged individually to separate files in the `Console Errors`
 
 ## Changelog
 
-### [1.3.0
+### [[1.3.0]](https://github.com/MichaJDev/NoConsoleSpam/releases/tag/1.3.0)
 - Cleaned more code
 - Fixed some small bugs and typos
 - Release candidate
