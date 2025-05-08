@@ -67,6 +67,11 @@ Exceptions are now logged individually to separate files in the `Console Errors`
 
 ## Changelog
 
+### [1.3.0
+- Cleaned more code
+- Fixed some small bugs and typos
+- Release candidate
+  
 ### [1.2.1] - Current
 - Streamlined codebase by removing unused features
 - Optimized jar file size
