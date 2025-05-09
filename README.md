@@ -138,16 +138,16 @@ The new exception logging system provides several options to control what gets l
 - Optimized jar file size
 - Simplified project structure
 
-### [1.2.0](CHANGES.md#120)
+### [1.2.0]
 - Added individual error logging to separate files in "Console Errors" directory
 - Improved exception handling and logging
 
-### [1.1.0](CHANGES.md#110)
+### [1.1.0]
 - Added external configuration file support
 - Moved spam filters to config/NoConsoleSpam/spamfilters.json
 - Added more default spam patterns
 
-### [1.0.0](CHANGES.md#100)
+### [1.0.0]
 - Initial release
 - Basic console spam filtering
 
