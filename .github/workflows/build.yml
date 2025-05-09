@@ -53,19 +53,18 @@ jobs:
           echo "Repository checkout complete"
           ls -la
       
-      - name: Setup JDK 17
+      - name: Setup JDK 21
         run: |
-          echo "Setting up JDK 17"
+          echo "Setting up JDK 21"
           java -version || {
-            echo "Java not found, installing OpenJDK 17"
+            echo "Java not found, installing OpenJDK 21"
             sudo apt-get update
-            sudo apt-get install -y openjdk-17-jdk
+            sudo apt-get install -y openjdk-21-jdk
           }
           
           export JAVA_HOME=$(dirname $(dirname $(readlink -f $(which javac))))
-          echo "JAVA_HOME=$JAVA_HOME"
-          echo "PATH=$PATH:$JAVA_HOME/bin" >> $GITHUB_ENV
           echo "JAVA_HOME=$JAVA_HOME" >> $GITHUB_ENV
+          echo "PATH=$PATH:$JAVA_HOME/bin" >> $GITHUB_ENV
           
           # Verify installation
           java -version
@@ -105,7 +104,7 @@ jobs:
   build:
     name: Build Project
     needs: setup
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     outputs:
       version: ${{ steps.extract_version.outputs.version }}
     steps:
@@ -137,13 +136,13 @@ jobs:
           echo "Repository contents:"
           ls -la
       
-      - name: Setup JDK 17
+      - name: Setup JDK 21
         run: |
-          echo "Setting up JDK 17 for build job"
+          echo "Setting up JDK 21 for build job"
           java -version || {
-            echo "Java not found, installing OpenJDK 17"
+            echo "Java not found, installing OpenJDK 21"
             sudo apt-get update
-            sudo apt-get install -y openjdk-17-jdk
+            sudo apt-get install -y openjdk-21-jdk
           }
           
           export JAVA_HOME=$(dirname $(dirname $(readlink -f $(which javac))))
@@ -200,7 +199,7 @@ jobs:
   test:
     name: Run Tests
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Create workspace directories
         run: |
@@ -226,13 +225,13 @@ jobs:
             git checkout ${{ github.ref_name }}
           fi
       
-      - name: Setup JDK 17
+      - name: Setup JDK 21
         run: |
-          echo "Setting up JDK 17 for test job"
+          echo "Setting up JDK 21 for test job"
           java -version || {
-            echo "Java not found, installing OpenJDK 17"
+            echo "Java not found, installing OpenJDK 21"
             sudo apt-get update
-            sudo apt-get install -y openjdk-17-jdk
+            sudo apt-get install -y openjdk-21-jdk
           }
           
           export JAVA_HOME=$(dirname $(dirname $(readlink -f $(which javac))))
@@ -259,7 +258,7 @@ jobs:
   prepare-artifacts:
     name: Prepare Release Artifacts
     needs: [build, test]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     outputs:
       artifact_name: ${{ steps.prepare_artifacts.outputs.artifact_name }}
       version: ${{ steps.get_version.outputs.version }}
@@ -331,7 +330,9 @@ jobs:
             # Setup JDK
             java -version || {
               sudo apt-get update
-              sudo apt-get install -y openjdk-17-jdk
+              sudo apt-get install -y openjdk-21-jdk
+              export JAVA_HOME=$(dirname $(dirname $(readlink -f $(which javac))))
+              echo "Using Java at: $JAVA_HOME"
             }
             
             # Build
@@ -378,7 +379,7 @@ jobs:
     name: Create GitHub Release
     if: startsWith(github.ref, 'refs/tags/v')
     needs: prepare-artifacts
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Get version information
         run: |
@@ -430,7 +431,9 @@ jobs:
             # Setup JDK
             java -version || {
               sudo apt-get update
-              sudo apt-get install -y openjdk-17-jdk
+              sudo apt-get install -y openjdk-21-jdk
+              export JAVA_HOME=$(dirname $(dirname $(readlink -f $(which javac))))
+              echo "Using Java at: $JAVA_HOME"
             }
             
             # Build
@@ -460,7 +463,7 @@ jobs:
           ## NoConsoleSpam $VERSION Release
           
           ### Installation
-          1. Install [Fabric Loader](https://fabricmc.net/use/) for Minecraft 1.20.1
+          1. Install [Fabric Loader](https://fabricmc.net/use/) for Minecraft 1.21.4
           2. Download the JAR file
           3. Place it in your Minecraft mods folder
           
@@ -478,7 +481,7 @@ jobs:
     name: Update Documentation
     if: startsWith(github.ref, 'refs/tags/v')
     needs: create-release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Manual repository checkout
         run: |
