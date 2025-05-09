@@ -92,6 +92,20 @@ public class FilterConfig {
         exceptionSettingsObj.addProperty("logFile", "logs/exceptions.log");
         exceptionSettingsObj.addProperty("maxLogSize", 10 * 1024 * 1024);
         exceptionSettingsObj.addProperty("maxBackupIndex", 3);
+        exceptionSettingsObj.addProperty("organizeBySource", true);
+        exceptionSettingsObj.addProperty("captureRuntimeExceptions", true);
+        exceptionSettingsObj.addProperty("captureIOExceptions", true);
+        exceptionSettingsObj.addProperty("captureFabricExceptions", true);
+        exceptionSettingsObj.addProperty("captureMinecraftExceptions", true);
+        
+        // Add more specific exception type settings
+        exceptionSettingsObj.addProperty("captureReflectionExceptions", true);
+        exceptionSettingsObj.addProperty("captureSecurityExceptions", true);
+        exceptionSettingsObj.addProperty("captureNetworkExceptions", true);
+        exceptionSettingsObj.addProperty("captureDataExceptions", true);
+        exceptionSettingsObj.addProperty("captureErrors", true);
+        exceptionSettingsObj.addProperty("captureConcurrentExceptions", true);
+        
         config.add("exceptionSettings", exceptionSettingsObj);
         
         return config;
@@ -121,16 +135,17 @@ public class FilterConfig {
                 return;
             }
             
-            Reader reader = new InputStreamReader(stream, StandardCharsets.UTF_8);
-            JsonObject config = new Gson().fromJson(reader, JsonObject.class);
-            
-            loadPatternsFromJson(config);
-            loadLoggersFromJson(config);
-            loadExceptionSettingsFromJson(config);
-            
-            LOGGER.info("Loaded {} spam patterns and {} ignored loggers from bundled configuration", 
-                    spamPatterns.size(), ignoredLoggers.size());
-        } catch (Exception e) {
+            try (Reader reader = new InputStreamReader(stream, StandardCharsets.UTF_8)) {
+                JsonObject config = new Gson().fromJson(reader, JsonObject.class);
+                
+                loadPatternsFromJson(config);
+                loadLoggersFromJson(config);
+                loadExceptionSettingsFromJson(config);
+                
+                LOGGER.info("Loaded {} spam patterns and {} ignored loggers from bundled configuration", 
+                        spamPatterns.size(), ignoredLoggers.size());
+            }
+        } catch (IOException e) {
             LOGGER.error("Error loading spam filter configuration", e);
             loadDefaultPatterns();
         }
@@ -183,6 +198,52 @@ public class FilterConfig {
             if (settingsObj.has("maxBackupIndex")) {
                 exceptionSettings.setMaxBackupIndex(settingsObj.get("maxBackupIndex").getAsInt());
             }
+            
+            // Load new exception settings
+            if (settingsObj.has("organizeBySource")) {
+                exceptionSettings.setOrganizeBySource(settingsObj.get("organizeBySource").getAsBoolean());
+            }
+            
+            if (settingsObj.has("captureRuntimeExceptions")) {
+                exceptionSettings.setCaptureRuntimeExceptions(settingsObj.get("captureRuntimeExceptions").getAsBoolean());
+            }
+            
+            if (settingsObj.has("captureIOExceptions")) {
+                exceptionSettings.setCaptureIOExceptions(settingsObj.get("captureIOExceptions").getAsBoolean());
+            }
+            
+            if (settingsObj.has("captureFabricExceptions")) {
+                exceptionSettings.setCaptureFabricExceptions(settingsObj.get("captureFabricExceptions").getAsBoolean());
+            }
+            
+            if (settingsObj.has("captureMinecraftExceptions")) {
+                exceptionSettings.setCaptureMinecraftExceptions(settingsObj.get("captureMinecraftExceptions").getAsBoolean());
+            }
+            
+            // Load additional exception type settings
+            if (settingsObj.has("captureReflectionExceptions")) {
+                exceptionSettings.setCaptureReflectionExceptions(settingsObj.get("captureReflectionExceptions").getAsBoolean());
+            }
+            
+            if (settingsObj.has("captureSecurityExceptions")) {
+                exceptionSettings.setCaptureSecurityExceptions(settingsObj.get("captureSecurityExceptions").getAsBoolean());
+            }
+            
+            if (settingsObj.has("captureNetworkExceptions")) {
+                exceptionSettings.setCaptureNetworkExceptions(settingsObj.get("captureNetworkExceptions").getAsBoolean());
+            }
+            
+            if (settingsObj.has("captureDataExceptions")) {
+                exceptionSettings.setCaptureDataExceptions(settingsObj.get("captureDataExceptions").getAsBoolean());
+            }
+            
+            if (settingsObj.has("captureErrors")) {
+                exceptionSettings.setCaptureErrors(settingsObj.get("captureErrors").getAsBoolean());
+            }
+            
+            if (settingsObj.has("captureConcurrentExceptions")) {
+                exceptionSettings.setCaptureConcurrentExceptions(settingsObj.get("captureConcurrentExceptions").getAsBoolean());
+            }
         }
     }
     
@@ -222,6 +283,19 @@ public class FilterConfig {
         private String logFile = "logs/exceptions.log";
         private long maxLogSize = 10 * 1024 * 1024; // 10MB
         private int maxBackupIndex = 3;
+        private boolean organizeBySource = true;
+        private boolean captureRuntimeExceptions = true;
+        private boolean captureIOExceptions = true;
+        private boolean captureFabricExceptions = true;
+        private boolean captureMinecraftExceptions = true;
+        
+        // Additional exception type settings
+        private boolean captureReflectionExceptions = true;
+        private boolean captureSecurityExceptions = true;
+        private boolean captureNetworkExceptions = true;
+        private boolean captureDataExceptions = true;
+        private boolean captureErrors = true;
+        private boolean captureConcurrentExceptions = true;
         
         public boolean isCaptureExceptions() {
             return captureExceptions;
@@ -253,6 +327,94 @@ public class FilterConfig {
         
         public void setMaxBackupIndex(int maxBackupIndex) {
             this.maxBackupIndex = maxBackupIndex;
+        }
+        
+        public boolean isOrganizeBySource() {
+            return organizeBySource;
+        }
+        
+        public void setOrganizeBySource(boolean organizeBySource) {
+            this.organizeBySource = organizeBySource;
+        }
+        
+        public boolean isCaptureRuntimeExceptions() {
+            return captureRuntimeExceptions;
+        }
+        
+        public void setCaptureRuntimeExceptions(boolean captureRuntimeExceptions) {
+            this.captureRuntimeExceptions = captureRuntimeExceptions;
+        }
+        
+        public boolean isCaptureIOExceptions() {
+            return captureIOExceptions;
+        }
+        
+        public void setCaptureIOExceptions(boolean captureIOExceptions) {
+            this.captureIOExceptions = captureIOExceptions;
+        }
+        
+        public boolean isCaptureFabricExceptions() {
+            return captureFabricExceptions;
+        }
+        
+        public void setCaptureFabricExceptions(boolean captureFabricExceptions) {
+            this.captureFabricExceptions = captureFabricExceptions;
+        }
+        
+        public boolean isCaptureMinecraftExceptions() {
+            return captureMinecraftExceptions;
+        }
+        
+        public void setCaptureMinecraftExceptions(boolean captureMinecraftExceptions) {
+            this.captureMinecraftExceptions = captureMinecraftExceptions;
+        }
+        
+        public boolean isCaptureReflectionExceptions() {
+            return captureReflectionExceptions;
+        }
+        
+        public void setCaptureReflectionExceptions(boolean captureReflectionExceptions) {
+            this.captureReflectionExceptions = captureReflectionExceptions;
+        }
+        
+        public boolean isCaptureSecurityExceptions() {
+            return captureSecurityExceptions;
+        }
+        
+        public void setCaptureSecurityExceptions(boolean captureSecurityExceptions) {
+            this.captureSecurityExceptions = captureSecurityExceptions;
+        }
+        
+        public boolean isCaptureNetworkExceptions() {
+            return captureNetworkExceptions;
+        }
+        
+        public void setCaptureNetworkExceptions(boolean captureNetworkExceptions) {
+            this.captureNetworkExceptions = captureNetworkExceptions;
+        }
+        
+        public boolean isCaptureDataExceptions() {
+            return captureDataExceptions;
+        }
+        
+        public void setCaptureDataExceptions(boolean captureDataExceptions) {
+            this.captureDataExceptions = captureDataExceptions;
+        }
+        
+        public boolean isCaptureErrors() {
+            return captureErrors;
+        }
+        
+        public void setCaptureErrors(boolean captureErrors) {
+            this.captureErrors = captureErrors;
+        }
+        
+        public boolean isCaptureConcurrentExceptions() {
+            return captureConcurrentExceptions;
+        }
+        
+        public void setCaptureConcurrentExceptions(boolean captureConcurrentExceptions) {
+            this.captureConcurrentExceptions = captureConcurrentExceptions;
         }
     }
 } 

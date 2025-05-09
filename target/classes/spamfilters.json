@@ -18,6 +18,17 @@
     "captureExceptions": true,
     "logFile": "logs/exceptions.log",
     "maxLogSize": 10485760,
-    "maxBackupIndex": 3
+    "maxBackupIndex": 3,
+    "organizeBySource": true,
+    "captureRuntimeExceptions": true,
+    "captureIOExceptions": true,
+    "captureFabricExceptions": true,
+    "captureMinecraftExceptions": true,
+    "captureReflectionExceptions": true,
+    "captureSecurityExceptions": true,
+    "captureNetworkExceptions": true,
+    "captureDataExceptions": true,
+    "captureErrors": true,
+    "captureConcurrentExceptions": true
   }
 } 

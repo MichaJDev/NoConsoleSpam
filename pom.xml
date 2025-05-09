@@ -6,17 +6,16 @@
 
     <groupId>eu.prismm</groupId>
     <artifactId>noconsolespam</artifactId>
-    <version>1.2.1</version>
+    <version>1.4.1</version>
 
     <properties>
-        <maven.compiler.source>17</maven.compiler.source>
-        <maven.compiler.target>17</maven.compiler.target>
-        <minecraft.version>1.20.1</minecraft.version>
-        <fabric.version>0.14.22</fabric.version>
-        <mappings>1.20.1+build.10</mappings>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+        <minecraft.version>1.21.5</minecraft.version>
+        <fabric.version>0.15.11</fabric.version>
+        <mappings>1.21.5+build.1</mappings>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <loom.version>1.2-SNAPSHOT</loom.version>
-        <fabric.api.version>0.85.0+1.20.1</fabric.api.version>
+        <loom.version>1.6.12</loom.version>
     </properties>
 
     <repositories>
@@ -49,21 +48,15 @@
             <scope>provided</scope>
         </dependency>
         <dependency>
-            <groupId>net.fabricmc.fabric-api</groupId>
-            <artifactId>fabric-api</artifactId>
-            <version>${fabric.api.version}</version>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-core</artifactId>
-            <version>2.19.0</version>
+            <version>2.22.1</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-api</artifactId>
-            <version>2.19.0</version>
+            <version>2.22.1</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
