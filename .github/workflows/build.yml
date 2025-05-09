@@ -17,7 +17,7 @@ env:
 jobs:
   setup:
     name: Repository Setup
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     outputs:
       version: ${{ steps.extract_version.outputs.version }}
     steps:
@@ -56,19 +56,32 @@ jobs:
       - name: Setup JDK 21
         run: |
           echo "Setting up JDK 21"
-          java -version || {
-            echo "Java not found, installing OpenJDK 21"
-            sudo apt-get update
-            sudo apt-get install -y openjdk-21-jdk
-          }
+          # Add repository for updated Java versions
+          sudo apt-get update
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository -y ppa:openjdk-r/ppa
+          sudo apt-get update
           
-          export JAVA_HOME=$(dirname $(dirname $(readlink -f $(which javac))))
-          echo "JAVA_HOME=$JAVA_HOME" >> $GITHUB_ENV
-          echo "PATH=$PATH:$JAVA_HOME/bin" >> $GITHUB_ENV
+          # Install OpenJDK 21
+          sudo apt-get install -y openjdk-21-jdk
           
-          # Verify installation
+          # Verify Java version and path
           java -version
           javac -version
+          
+          # Set JAVA_HOME and update PATH
+          export JAVA_HOME=$(dirname $(dirname $(readlink -f $(which javac))))
+          echo "JAVA_HOME=$JAVA_HOME" >> $GITHUB_ENV
+          echo "PATH=$JAVA_HOME/bin:$PATH" >> $GITHUB_ENV
+          
+          echo "Java installation details:"
+          echo "JAVA_HOME: $JAVA_HOME"
+          echo "Java binary: $(which java)"
+          echo "Javac binary: $(which javac)"
+          
+          # Ensure Maven uses correct Java version
+          sudo update-alternatives --display java || echo "No alternatives found"
+          sudo update-alternatives --display javac || echo "No alternatives found"
       
       - name: Extract version from pom.xml
         id: extract_version
@@ -100,6 +113,30 @@ jobs:
           else
             echo "Warning: pom.xml not found"
           fi
+
+      - name: Setup Maven Toolchains
+        run: |
+          echo "Setting up Maven toolchains.xml"
+          mkdir -p ~/.m2
+          cat > ~/.m2/toolchains.xml << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <toolchains xmlns="http://maven.apache.org/TOOLCHAINS/1.1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:schemaLocation="http://maven.apache.org/TOOLCHAINS/1.1.0 http://maven.apache.org/xsd/toolchains-1.1.0.xsd">
+            <toolchain>
+              <type>jdk</type>
+              <provides>
+                <version>21</version>
+                <vendor>openjdk</vendor>
+              </provides>
+              <configuration>
+                <jdkHome>${JAVA_HOME}</jdkHome>
+              </configuration>
+            </toolchain>
+          </toolchains>
+          EOF
+          
+          echo "Toolchains file created:"
+          cat ~/.m2/toolchains.xml
 
   build:
     name: Build Project
@@ -139,15 +176,28 @@ jobs:
       - name: Setup JDK 21
         run: |
           echo "Setting up JDK 21 for build job"
-          java -version || {
-            echo "Java not found, installing OpenJDK 21"
-            sudo apt-get update
-            sudo apt-get install -y openjdk-21-jdk
-          }
+          # Add repository for updated Java versions
+          sudo apt-get update
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository -y ppa:openjdk-r/ppa
+          sudo apt-get update
           
+          # Install OpenJDK 21
+          sudo apt-get install -y openjdk-21-jdk
+          
+          # Verify Java version and path
+          java -version
+          javac -version
+          
+          # Set JAVA_HOME and update PATH
           export JAVA_HOME=$(dirname $(dirname $(readlink -f $(which javac))))
           echo "JAVA_HOME=$JAVA_HOME" >> $GITHUB_ENV
-          echo "PATH=$PATH:$JAVA_HOME/bin" >> $GITHUB_ENV
+          echo "PATH=$JAVA_HOME/bin:$PATH" >> $GITHUB_ENV
+          
+          echo "Java installation details:"
+          echo "JAVA_HOME: $JAVA_HOME"
+          echo "Java binary: $(which java)"
+          echo "Javac binary: $(which javac)"
       
       - name: Restore Maven cache
         run: |
@@ -166,7 +216,10 @@ jobs:
         run: |
           cd ${{ env.REPO_DIR }}_build/repo
           echo "Building project with Maven"
-          mvn -B clean package
+          echo "Using Java version:"
+          java -version
+          echo "JAVA_HOME: $JAVA_HOME"
+          mvn -B clean package -Dmaven.compiler.fork=true -Dmaven.compiler.executable=$JAVA_HOME/bin/javac -t ~/.m2/toolchains.xml
           
           # Verify build success
           if [ ! -d "target" ]; then
@@ -228,15 +281,28 @@ jobs:
       - name: Setup JDK 21
         run: |
           echo "Setting up JDK 21 for test job"
-          java -version || {
-            echo "Java not found, installing OpenJDK 21"
-            sudo apt-get update
-            sudo apt-get install -y openjdk-21-jdk
-          }
+          # Add repository for updated Java versions
+          sudo apt-get update
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository -y ppa:openjdk-r/ppa
+          sudo apt-get update
           
+          # Install OpenJDK 21
+          sudo apt-get install -y openjdk-21-jdk
+          
+          # Verify Java version and path
+          java -version
+          javac -version
+          
+          # Set JAVA_HOME and update PATH
           export JAVA_HOME=$(dirname $(dirname $(readlink -f $(which javac))))
           echo "JAVA_HOME=$JAVA_HOME" >> $GITHUB_ENV
-          echo "PATH=$PATH:$JAVA_HOME/bin" >> $GITHUB_ENV
+          echo "PATH=$JAVA_HOME/bin:$PATH" >> $GITHUB_ENV
+          
+          echo "Java installation details:"
+          echo "JAVA_HOME: $JAVA_HOME"
+          echo "Java binary: $(which java)"
+          echo "Javac binary: $(which javac)"
       
       - name: Restore Maven cache
         run: |
@@ -253,7 +319,10 @@ jobs:
         run: |
           cd ${{ env.REPO_DIR }}_test/repo
           echo "Running tests"
-          mvn -B test
+          echo "Using Java version:"
+          java -version
+          echo "JAVA_HOME: $JAVA_HOME"
+          mvn -B test -Dmaven.compiler.fork=true -Dmaven.compiler.executable=$JAVA_HOME/bin/javac -t ~/.m2/toolchains.xml
 
   prepare-artifacts:
     name: Prepare Release Artifacts
@@ -328,16 +397,42 @@ jobs:
             fi
             
             # Setup JDK
-            java -version || {
-              sudo apt-get update
-              sudo apt-get install -y openjdk-21-jdk
-              export JAVA_HOME=$(dirname $(dirname $(readlink -f $(which javac))))
-              echo "Using Java at: $JAVA_HOME"
-            }
+            sudo apt-get update
+            sudo apt-get install -y software-properties-common
+            sudo add-apt-repository -y ppa:openjdk-r/ppa
+            sudo apt-get update
+            sudo apt-get install -y openjdk-21-jdk
+            
+            # Set JAVA_HOME
+            export JAVA_HOME=$(dirname $(dirname $(readlink -f $(which javac))))
+            echo "Using Java at: $JAVA_HOME"
+            java -version
+            
+            # Setup Maven toolchains for embedded build
+            mkdir -p ~/.m2
+            cat > ~/.m2/toolchains.xml << EOF
+            <?xml version="1.0" encoding="UTF-8"?>
+            <toolchains xmlns="http://maven.apache.org/TOOLCHAINS/1.1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+              xsi:schemaLocation="http://maven.apache.org/TOOLCHAINS/1.1.0 http://maven.apache.org/xsd/toolchains-1.1.0.xsd">
+              <toolchain>
+                <type>jdk</type>
+                <provides>
+                  <version>21</version>
+                  <vendor>openjdk</vendor>
+                </provides>
+                <configuration>
+                  <jdkHome>${JAVA_HOME}</jdkHome>
+                </configuration>
+              </toolchain>
+            </toolchains>
+            EOF
             
             # Build
             echo "Building project in $REBUILD_DIR"
-            mvn -B clean package
+            echo "Using Java version:"
+            java -version
+            echo "JAVA_HOME: $JAVA_HOME"
+            mvn -B clean package -Dmaven.compiler.fork=true -Dmaven.compiler.executable=$JAVA_HOME/bin/javac -t ~/.m2/toolchains.xml
             
             # Create artifact directory and copy build artifacts
             mkdir -p ${{ env.ARTIFACT_DIR }}/target
@@ -429,16 +524,42 @@ jobs:
             fi
             
             # Setup JDK
-            java -version || {
-              sudo apt-get update
-              sudo apt-get install -y openjdk-21-jdk
-              export JAVA_HOME=$(dirname $(dirname $(readlink -f $(which javac))))
-              echo "Using Java at: $JAVA_HOME"
-            }
+            sudo apt-get update
+            sudo apt-get install -y software-properties-common
+            sudo add-apt-repository -y ppa:openjdk-r/ppa
+            sudo apt-get update
+            sudo apt-get install -y openjdk-21-jdk
+            
+            # Set JAVA_HOME
+            export JAVA_HOME=$(dirname $(dirname $(readlink -f $(which javac))))
+            echo "Using Java at: $JAVA_HOME"
+            java -version
+            
+            # Setup Maven toolchains for embedded build
+            mkdir -p ~/.m2
+            cat > ~/.m2/toolchains.xml << EOF
+            <?xml version="1.0" encoding="UTF-8"?>
+            <toolchains xmlns="http://maven.apache.org/TOOLCHAINS/1.1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+              xsi:schemaLocation="http://maven.apache.org/TOOLCHAINS/1.1.0 http://maven.apache.org/xsd/toolchains-1.1.0.xsd">
+              <toolchain>
+                <type>jdk</type>
+                <provides>
+                  <version>21</version>
+                  <vendor>openjdk</vendor>
+                </provides>
+                <configuration>
+                  <jdkHome>${JAVA_HOME}</jdkHome>
+                </configuration>
+              </toolchain>
+            </toolchains>
+            EOF
             
             # Build
             echo "Building release in $RELEASE_REBUILD_DIR"
-            mvn -B clean package
+            echo "Using Java version:"
+            java -version
+            echo "JAVA_HOME: $JAVA_HOME"
+            mvn -B clean package -Dmaven.compiler.fork=true -Dmaven.compiler.executable=$JAVA_HOME/bin/javac -t ~/.m2/toolchains.xml
             
             # Copy to release directory
             cp -v "target/$ARTIFACT_NAME" "${{ env.RELEASE_DIR }}/$ARTIFACT_NAME"
@@ -580,4 +701,52 @@ jobs:
             echo "VERSION: $(cat ${{ env.CACHE_DIR }}/version.txt)"
           else
             echo "Version file not found"
-          fi 
+          fi
+
+      - name: Setup Maven Toolchains
+        run: |
+          echo "Setting up Maven toolchains.xml for build job"
+          mkdir -p ~/.m2
+          cat > ~/.m2/toolchains.xml << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <toolchains xmlns="http://maven.apache.org/TOOLCHAINS/1.1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:schemaLocation="http://maven.apache.org/TOOLCHAINS/1.1.0 http://maven.apache.org/xsd/toolchains-1.1.0.xsd">
+            <toolchain>
+              <type>jdk</type>
+              <provides>
+                <version>21</version>
+                <vendor>openjdk</vendor>
+              </provides>
+              <configuration>
+                <jdkHome>${JAVA_HOME}</jdkHome>
+              </configuration>
+            </toolchain>
+          </toolchains>
+          EOF
+          
+          echo "Toolchains file created:"
+          cat ~/.m2/toolchains.xml
+
+      - name: Setup Maven Toolchains
+        run: |
+          echo "Setting up Maven toolchains.xml for test job"
+          mkdir -p ~/.m2
+          cat > ~/.m2/toolchains.xml << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <toolchains xmlns="http://maven.apache.org/TOOLCHAINS/1.1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:schemaLocation="http://maven.apache.org/TOOLCHAINS/1.1.0 http://maven.apache.org/xsd/toolchains-1.1.0.xsd">
+            <toolchain>
+              <type>jdk</type>
+              <provides>
+                <version>21</version>
+                <vendor>openjdk</vendor>
+              </provides>
+              <configuration>
+                <jdkHome>${JAVA_HOME}</jdkHome>
+              </configuration>
+            </toolchain>
+          </toolchains>
+          EOF
+          
+          echo "Toolchains file created:"
+          cat ~/.m2/toolchains.xml 
