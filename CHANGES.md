@@ -112,6 +112,7 @@ This document provides detailed information about changes in each version of NoC
 - Fixed potential resource leak in exception logging
 - Addressed deprecation warnings in logging implementation
 - Improved error capture with more comprehensive stack traces
+- Deleted hot-reloading as it casts errors because of the priotisation of running order of the mod
 
 ## 1.1.0
 
