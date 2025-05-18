@@ -115,7 +115,7 @@ The new exception logging system provides several options to control what gets l
 
 So until now all changes for all platforms would've been the same per update of console spam but i am changing that
 So we are going to show it like this <Major NCS updates>.<ReleaseVersionMinecraft>.<Bugfixes and Snapshot support> 
-So if we are updating to release versions (ergo 1.21.6 or 1.22) we will update from 1.4.2 to 1.5.0 and for snapshots (so next weeks snapshot 25w21a) will be 1.4.3S
+So if we are updating to release versions (ergo 1.21.6 or 1.22) we will update from 1.4.2 to 1.5.0 and for snapshots (so next weeks snapshot 25w21a) will be 1.4.3
 (depending of builds that had bugfixes and i dont want to release, ergo server breaking changes) 
 
 ## Changelog
