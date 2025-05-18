@@ -135,6 +135,7 @@ So if we are updating to release versions (ergo 1.21.6 or 1.22) we will update f
 - Fixed potential resource leak in exception logging
 - Addressed deprecation warnings in logging implementation
 - Improved error capture with more comprehensive stack traces
+- Deleted hot-reloading as it casts errors because of the priotisation of running order of the mod
 
 ## 1.1.0
 
