@@ -181,10 +181,6 @@ public class SpamFilter extends AbstractFilter {
             this.instant.initFromEpochMilli(System.currentTimeMillis(), 0);
         }
 
-        SimpleLogEvent(String loggerName, Level level, Marker marker, Message message) {
-            this(loggerName, level, marker, message, null);
-        }
-
         @Override
         public Message getMessage() {
             return message;
@@ -287,7 +283,7 @@ public class SpamFilter extends AbstractFilter {
 
         @Override
         public long getThreadId() {
-            return Thread.currentThread().getId();
+            return Thread.currentThread().threadId();
         }
 
         @Override

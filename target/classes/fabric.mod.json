@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "noconsolespam",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "name": "NoConsoleSpam",
   "description": "A mod that reduces console spam by filtering out unnecessary messages",
   "authors": [
@@ -23,7 +23,7 @@
   },
   "depends": {
     "fabricloader": ">=0.15.11",
-    "minecraft": ["~1.21.4", "~1.21.5"],
+    "minecraft": ["~1.21.4", "~1.21.5", "24w20a"],
     "java": ">=21"
   },
   "suggests": {

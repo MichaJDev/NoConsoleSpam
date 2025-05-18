@@ -2,6 +2,29 @@
 
 This document provides detailed information about changes in each version of NoConsoleSpam.
 
+## 1.4.2
+
+*Released: June 15, 2025*
+
+### Major Changes
+
+- Versioning changes
+- Added support for Minecraft snapshot 25w20a
+- Updated mapping dependencies to support snapshot 25w20a
+
+### Technical Improvements
+
+- Updated build configuration to accommodate snapshot version
+- Verified compatibility with Fabric Loader 0.15.11 on snapshot
+- Updated version references in code and documentation
+
+#### Explanation Versioning Changes
+
+So until now all changes for all platforms would've been the same per update of console spam but i am changing that
+So we are going to show it like this <Major NCS updates>.<ReleaseVersionMinecraft>.<Bugfixes and Snapshot support> 
+So if we are updating to release versions (ergo 1.21.6 or 1.22) we will update from 1.4.2 to 1.5.0 and for snapshots (so next weeks snapshot 25w21a) will be 1.4.3S
+(depending of builds that had bugfixes and i dont want to release, ergo server breaking changes) 
+
 ## 1.4.1
 
 *Released: June 10, 2025*

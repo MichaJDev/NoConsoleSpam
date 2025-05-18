@@ -2,6 +2,13 @@
 
 This document provides links to all released versions of NoConsoleSpam.
 
+## [1.4.2](https://github.com/MichaJDev/NoConsoleSpam/releases/tag/v1.4.2) - 2025-06-15
+
+- [Download JAR](https://github.com/MichaJDev/NoConsoleSpam/releases/download/v1.4.2/noconsolespam-1.4.2.jar)
+- [View Changes](https://github.com/MichaJDev/NoConsoleSpam/blob/main/CHANGES.md#142)
+- Compatible with Minecraft 1.21.4, 1.21.5, and snapshot 24w20a
+- **Snapshot Compatibility**: Added support for Minecraft snapshot 24w20a
+
 ## [1.4.1](https://github.com/MichaJDev/NoConsoleSpam/releases/tag/v1.4.1) - 2025-06-10
 
 - [Download JAR](https://github.com/MichaJDev/NoConsoleSpam/releases/download/v1.4.1/noconsolespam-1.4.1.jar)

@@ -10,7 +10,7 @@ import org.apache.logging.log4j.core.config.LoggerConfig;
 
 public class NoConsoleSpam implements ModInitializer, PreLaunchEntrypoint {
     public static final String MOD_ID = "noconsolespam";
-    public static final String VERSION = "1.4.1"; // Updated version to reflect Minecraft 1.21.4 and 1.21.5 compatibility
+    public static final String VERSION = "1.4.2"; // Updated version to reflect Minecraft 1.21.4, 1.21.5 and snapshot 24w20a compatibility
     private static final Logger LOGGER = LogManager.getLogger(MOD_ID);
     
     private FilterConfig filterConfig;
